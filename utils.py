@@ -516,31 +516,52 @@ def truncate_filename(filename, max_length=25):
         return filename[:max_length - 3] + '...'
 
 
-def add_wheel_support(input_key):
-    """添加鼠标滚轮支持到数字输入框"""
-    js_code = f"""
+def add_wheel_support():
+    """全局鼠标滚轮支持：在所有数字输入框上滚动即模拟点击 +/- 按钮，触发 on_change 同步滑块"""
+    components.html("""
     <script>
-    (function() {{
-        var input = document.querySelector('input[data-testid="stNumberInput-{input_key}"] input');
-        if (input) {{
-            input.addEventListener('wheel', function(e) {{
-                e.preventDefault();
-                var step = parseInt(this.step) || 1;
-                var max = parseInt(this.max) || 100;
-                var min = parseInt(this.min) || 1;
-                var value = parseInt(this.value) || min;
+    (function() {
+        const doc = window.parent.document;
+        let wheelThrottle = false;
 
-                if (e.deltaY < 0) {{
-                    this.value = Math.min(max, value + step);
-                }} else {{
-                    this.value = Math.max(min, value - step);
-                }}
+        function setupWheelListeners() {
+            const inputs = doc.querySelectorAll('input[type="number"]');
+            inputs.forEach(function(input) {
+                if (input.dataset.wheelReady) return;
+                input.dataset.wheelReady = '1';
 
-                var event = new Event('change', {{ bubbles: true }});
-                this.dispatchEvent(event);
-            }}, {{ passive: false }});
-        }}
-    }})();
+                input.addEventListener('wheel', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (wheelThrottle) return;
+                    wheelThrottle = true;
+
+                    const container = input.closest('[data-testid="stNumberInput"]');
+                    if (!container) { wheelThrottle = false; return; }
+
+                    const upBtn = container.querySelector('button[data-testid="stNumberInputStepUp"]');
+                    const downBtn = container.querySelector('button[data-testid="stNumberInputStepDown"]');
+
+                    const target = e.deltaY < 0 ? upBtn : downBtn;
+                    if (target && !target.disabled) {
+                        target.click();
+                        // 视觉反馈
+                        input.style.boxShadow = e.deltaY < 0
+                            ? '0 0 0 2px #4CAF50'
+                            : '0 0 0 2px #ff9800';
+                        setTimeout(function() { input.style.boxShadow = ''; }, 200);
+                    }
+
+                    setTimeout(function() { wheelThrottle = false; }, 80);
+                }, { passive: false });
+            });
+        }
+
+        // 初次启动 + MutationObserver 覆盖动态添加的输入框
+        setTimeout(setupWheelListeners, 800);
+        new MutationObserver(function() { setTimeout(setupWheelListeners, 400); })
+            .observe(doc.body, { childList: true, subtree: true });
+    })();
     </script>
-    """
-    components.html(js_code, height=0)
+    """, height=0)

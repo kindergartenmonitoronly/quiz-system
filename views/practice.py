@@ -9,7 +9,7 @@ from database import (
     activate_question_bank, get_wrong_book_files, get_wrong_questions
 )
 from quiz_engine import start_quiz
-from utils import truncate_filename
+from utils import truncate_filename, add_wheel_support
 
 
 def render_practice_page():
@@ -373,6 +373,8 @@ def render_practice_settings():
                 st.info("📝 使用说明：\n• 数字键1-6选择对应选项\n• Enter键提交答案\n• ← → 键切换题目")
             else:
                 st.info("禁用键盘控制")
+
+    add_wheel_support()
 
     st.divider()
     col_start, col_back = st.columns([2, 1])
