@@ -165,13 +165,8 @@ def render_practice_page():
         wrong_list = get_wrong_questions()
         if st.button("📕 错题重练", use_container_width=True,
                      help="专门练习错题本中的题目", disabled=len(wrong_list) == 0):
-            wrong_df = pd.DataFrame(wrong_list)
-            st.session_state.data = wrong_df
-            st.session_state.current_file_name = "错题本"
-            st.session_state.current_bank_name = "错题本"
             st.session_state.practice_mode = 'review'
-            st.session_state.wrong_book_random_mode = False
-
+            # 保存原题库信息用于退出时恢复
             if not st.session_state.original_bank_before_review:
                 active_bank = get_active_question_bank()
                 if active_bank:
@@ -180,7 +175,6 @@ def render_practice_page():
                         'name': active_bank['bank_name'],
                         'file': active_bank['file_name']
                     }
-
             st.rerun()
 
     if st.session_state.practice_mode:
@@ -230,11 +224,36 @@ def render_practice_settings():
     _cached_wrong_list = get_wrong_questions() if st.session_state.practice_mode == 'review' else []
 
     if st.session_state.practice_mode == 'review':
-        # 错题重练模式只显示题型筛选，题库筛选在错题本页已完成
-        all_types = df['题型'].unique()
-        default_types = list(all_types) if len(all_types) > 0 else []
-        selected = st.multiselect("选择题型", all_types, default=default_types, help="选择要练习的题型")
-        st.session_state.selected_types = selected
+        # 错题重练：刷题模式选择
+        st.subheader("1. 选择重练模式")
+        review_mode_col1, review_mode_col2, review_mode_col3 = st.columns(3)
+        with review_mode_col1:
+            if st.button("📖 顺序重练", use_container_width=True,
+                         type="primary" if st.session_state.get('_review_submode') == 'sequential' else "secondary"):
+                st.session_state._review_submode = 'sequential'
+                st.rerun()
+        with review_mode_col2:
+            if st.button("🎲 随机重练", use_container_width=True,
+                         type="primary" if st.session_state.get('_review_submode') == 'random' else "secondary"):
+                st.session_state._review_submode = 'random'
+                st.rerun()
+        with review_mode_col3:
+            if st.button("🔢 按错误次数", use_container_width=True,
+                         type="primary" if st.session_state.get('_review_submode') == 'error_count' else "secondary"):
+                st.session_state._review_submode = 'error_count'
+                st.rerun()
+        if '_review_submode' not in st.session_state:
+            st.session_state._review_submode = 'sequential'
+
+        # 题型筛选（从错题本获取题型分布）
+        st.subheader("2. 选择题型")
+        wrong_types = list(set(w.get('题型', '未知') for w in _cached_wrong_list))
+        if len(wrong_types) > 0:
+            default_types = wrong_types
+            selected = st.multiselect("选择题型", wrong_types, default=default_types, help="选择要练习的题型")
+            st.session_state.selected_types = selected
+        else:
+            st.session_state.selected_types = []
 
     else:
         col_set1, col_set2 = st.columns(2)
@@ -250,28 +269,27 @@ def render_practice_settings():
     st.subheader("2. 题目数量设置")
 
     if st.session_state.practice_mode == 'review':
+        # 筛选错题
         wrong_list = _cached_wrong_list
         filtered_wrong_list = []
         for wrong in wrong_list:
             q_type = wrong.get('题型', '')
             if st.session_state.selected_types and q_type not in st.session_state.selected_types:
                 continue
-            file_name = wrong.get('_file_name', '')
-            if (hasattr(st.session_state, 'wrong_book_filter') and
-                    st.session_state.wrong_book_filter and
-                    st.session_state.wrong_book_filter != '全部' and
-                    file_name != st.session_state.wrong_book_filter):
-                continue
             filtered_wrong_list.append(wrong)
 
         wrong_count = len(filtered_wrong_list)
-        max_questions = wrong_count
 
-        if wrong_count > 0 and st.session_state.wrong_book_random_mode:
+        if wrong_count == 0:
+            st.warning("没有符合条件的错题")
+        else:
+            max_questions = wrong_count
+            submode = st.session_state.get('_review_submode', 'sequential')
+            default_count = min(20, max_questions) if submode == 'random' else max_questions
+
             if 'shared_count_review' not in st.session_state:
-                st.session_state.shared_count_review = min(10, max_questions)
+                st.session_state.shared_count_review = default_count
 
-            # 始终同步 widget key
             st.session_state._slider_key_review = st.session_state.shared_count_review
             st.session_state._input_key_review = st.session_state.shared_count_review
 
@@ -296,10 +314,6 @@ def render_practice_settings():
                                 step=1, key="_input_key_review", on_change=callback_input_review)
 
             st.success(f"当前题目数量: {st.session_state.shared_count_review}")
-
-        elif wrong_count > 0:
-            st.session_state.question_count = wrong_count
-            st.info(f"将顺序练习所有 {wrong_count} 道错题")
 
     else:
         filtered_df = df[df['题型'].isin(st.session_state.selected_types)] if st.session_state.selected_types else df
@@ -365,29 +379,38 @@ def render_practice_settings():
     with col_start:
         disabled = False
         if st.session_state.practice_mode == 'review':
-            wrong_list = _cached_wrong_list
-            filtered_count = 0
-            for wrong in wrong_list:
-                q_type = wrong.get('题型', '')
-                if st.session_state.selected_types and q_type not in st.session_state.selected_types:
-                    continue
-                if (hasattr(st.session_state, 'wrong_book_filter') and
-                        st.session_state.wrong_book_filter and
-                        st.session_state.wrong_book_filter != '全部'):
-                    file_name = wrong.get('_file_name', '')
-                    if file_name != st.session_state.wrong_book_filter:
-                        continue
-                filtered_count += 1
-            if filtered_count == 0:
+            # 按题型筛选错题
+            filtered = [w for w in _cached_wrong_list
+                        if w.get('题型', '') in st.session_state.selected_types] if st.session_state.selected_types else _cached_wrong_list
+            if len(filtered) == 0:
                 disabled = True
                 st.warning("没有符合条件的错题")
 
         if st.button("🚀 开始刷题", type="primary", use_container_width=True, disabled=disabled):
-            if not st.session_state.selected_types:
+            if st.session_state.practice_mode == 'review':
+                # 加载错题并按选定模式排序
+                submode = st.session_state.get('_review_submode', 'sequential')
+                sort_map = {'sequential': 'recent_random', 'random': 'random', 'error_count': 'error_count_random'}
+                loaded = get_wrong_questions(sort_by=sort_map.get(submode, 'recent_random'))
+                # 应用题型筛选
+                if st.session_state.selected_types:
+                    loaded = [w for w in loaded if w.get('题型', '') in st.session_state.selected_types]
+                if not loaded:
+                    st.warning("没有符合条件的错题")
+                    st.rerun()
+                wrong_df = pd.DataFrame(loaded)
+                st.session_state.data = wrong_df
+                st.session_state.current_file_name = "错题重练"
+                st.session_state.current_bank_name = "错题重练"
+                st.session_state.review_mode = True
+                st.session_state.wrong_book_random_mode = (submode == 'random')
+                st.session_state.selected_types = list(wrong_df['题型'].unique()) if '题型' in wrong_df.columns else []
+                start_quiz('review')
+            elif not st.session_state.selected_types:
                 st.error("请至少选择一种题型")
             else:
                 start_quiz(st.session_state.practice_mode)
-                st.rerun()
+            st.rerun()
 
     with col_back:
         if st.button("返回", type="secondary", use_container_width=True):

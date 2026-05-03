@@ -532,21 +532,24 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             submit_answer_action(row)
             st.rerun()
 
+        # 构建题目卡片 HTML（键盘提示 + 卡片开头合并为一个 st.markdown 消除间隙）
+        card_html = ''
+        if st.session_state.keyboard_control and not st.session_state.show_result:
+            card_html += '''
+            <div class="keyboard-hint-compact">
+                <span style="font-weight:bold">🎮 键盘已启用</span>
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
+            </div>
+            '''
+        card_html += f'<div class="question-card qtype-{question_type_css(row)}">'
+
         with st.container():
-            # 键盘控制提示（题目上方，紧凑一行，放在 container 内避免额外块间距）
-            if st.session_state.keyboard_control and not st.session_state.show_result:
-                components.html("""
-                <div class="keyboard-hint-compact" style="margin-bottom:0">
-                    <span style="font-weight:bold">🎮 键盘已启用</span>
-                    &nbsp;|&nbsp;
-                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
-                    &nbsp;|&nbsp;
-                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
-                    &nbsp;|&nbsp;
-                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
-                </div>
-                """, height=32)
-            st.markdown(f'<div class="question-card qtype-{question_type_css(row)}">', unsafe_allow_html=True)
+            st.markdown(card_html, unsafe_allow_html=True)
 
             col_info1, col_info2, col_timer = st.columns([6, 2, 2])
             with col_info1:
