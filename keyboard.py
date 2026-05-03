@@ -114,6 +114,25 @@ def phantom_enter_callback():
     else:
         st.session_state.last_submit_time = time.time()
 
+    # 从 radio/checkbox/text 控件同步 user_answer（鼠标点击后 Enter 提交的关键修复）
+    q_type = row.get('题型', '单选题')
+    radio_key = f"q_{st.session_state.current_index}"
+    if q_type in ['单选题', '判断题'] and radio_key in st.session_state:
+        radio_val = st.session_state[radio_key]
+        if radio_val and not st.session_state.user_answer:
+            # 从 radio 显示文本提取选项字母
+            st.session_state.user_answer = radio_val[0] if radio_val and radio_val[0] in 'ABCDEF' else radio_val
+    elif q_type == '多选题':
+        selected = []
+        for i in range(6):
+            letter = chr(65 + i)
+            if st.session_state.get(f"mq_{letter}_{st.session_state.current_index}", False):
+                # 打乱映射
+                letter_map = st.session_state.get(f'_shuffle_map_{st.session_state.current_index}', {})
+                selected.append(letter_map.get(letter, letter) if letter_map else letter)
+        if selected:
+            st.session_state.user_answer = ''.join(sorted(selected))
+
     submit_answer_action(row)
 
 

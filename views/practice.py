@@ -93,6 +93,29 @@ def render_practice_page():
 
     st.header("📚 开始刷题")
 
+    # 题库切换下拉框
+    all_banks = get_all_question_banks()
+    if len(all_banks) > 1:
+        bank_options = {f"{b['bank_name']} ({b['total_questions']}题)": b for b in all_banks}
+        current_label = next((k for k, b in bank_options.items() if b['id'] == st.session_state.current_bank_id), None)
+        selected_label = st.selectbox(
+            "📂 切换题库", list(bank_options.keys()),
+            index=list(bank_options.keys()).index(current_label) if current_label else 0,
+            label_visibility="collapsed"
+        )
+        selected_bank = bank_options[selected_label]
+        if selected_bank['id'] != st.session_state.current_bank_id:
+            activate_question_bank(selected_bank['id'])
+            df = load_questions_from_bank(selected_bank['id'])
+            if not df.empty:
+                st.session_state.data = df
+                st.session_state.current_file_name = selected_bank['file_name']
+                st.session_state.current_bank_name = selected_bank['bank_name']
+                st.session_state.current_bank_file = selected_bank['file_name']
+                st.session_state.current_bank_id = selected_bank['id']
+                st.session_state.selected_types = []
+                st.rerun()
+
     df = st.session_state.data
     question_count = len(df)
 

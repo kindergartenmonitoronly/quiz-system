@@ -80,6 +80,8 @@ input[type="number"] { cursor: ns-resize; }
 .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
 .keyboard-key-label { font-size: 11px; opacity: 0.9; }
 .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
+/* 消除 Streamlit 块之间的多余间距 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] { gap: 0 !important; }
 
 /* 深色模式 */
 @media (prefers-color-scheme: dark) {
@@ -153,6 +155,25 @@ def _save_and_exit_quiz():
     restore_original_data()
 
 
+def _restore_bank_from_session():
+    """从侧边栏退出错题重练后恢复原题库"""
+    from database import activate_question_bank, load_questions_from_bank
+    original_bank = st.session_state.original_bank_before_review
+    if original_bank:
+        activate_question_bank(original_bank['id'])
+        df = load_questions_from_bank(original_bank['id'])
+        if not df.empty:
+            st.session_state.data = df
+            st.session_state.current_file_name = original_bank['file']
+            st.session_state.current_bank_name = original_bank['name']
+            st.session_state.current_bank_file = original_bank['file']
+            st.session_state.current_bank_id = original_bank['id']
+    st.session_state.review_mode = False
+    st.session_state.practice_mode = None
+    st.session_state.original_bank_before_review = None
+    st.session_state.sidebar_collapsed = False
+
+
 # ============================================================
 # 侧边栏导航
 # ============================================================
@@ -189,6 +210,23 @@ with st.sidebar:
             st.session_state.quiz_active = False
             st.session_state.sidebar_collapsed = False
             st.rerun()
+
+        # 错题重练模式：显示返回原题库按钮
+        if st.session_state.review_mode and st.session_state.original_bank_before_review:
+            if st.button("🔙 退出错题重练", use_container_width=True, type="primary"):
+                if st.session_state.current_bank_id and st.session_state.practice_mode:
+                    save_study_progress(
+                        bank_id=st.session_state.current_bank_id,
+                        practice_mode=st.session_state.practice_mode,
+                        current_index=st.session_state.current_index,
+                        question_results=st.session_state.question_results,
+                        total_questions=get_total_questions()
+                    )
+                    st.success("进度已保存")
+                st.session_state.quiz_active = False
+                st.session_state.review_mode = False
+                _restore_bank_from_session()
+                st.rerun()
 
     # ================================================================
     # 非答题模式 — 完整侧边栏
@@ -282,6 +320,31 @@ with st.sidebar:
 # 主界面 — 答题模式
 # ============================================================
 if st.session_state.quiz_active and not st.session_state.force_exit_results:
+    # 全局 MutationObserver：幻影按钮一旦被 Streamlit 渲染到 DOM 就立即隐藏，杜绝闪烁
+    components.html("""
+    <script>
+    (function() {
+        var doc = window.parent.document;
+        function hideIfPhantom(el) {
+            if (el.innerText && el.innerText.indexOf(':::') >= 0) {
+                el.style.display = 'none'; el.style.visibility = 'hidden';
+                el.style.position = 'absolute'; el.style.left = '-9999px';
+                el.style.height = '1px'; el.style.overflow = 'hidden';
+            }
+        }
+        new MutationObserver(function(ms) {
+            ms.forEach(function(m) {
+                m.addedNodes.forEach(function(n) {
+                    if (n.nodeType !== 1) return;
+                    if (n.tagName === 'BUTTON') hideIfPhantom(n);
+                    if (n.querySelectorAll) n.querySelectorAll('button').forEach(hideIfPhantom);
+                });
+            });
+        }).observe(doc.body, {childList: true, subtree: true});
+    })();
+    </script>
+    """, height=0)
+
     if st.session_state.keyboard_control:
         render_keyboard_controls()
         st.markdown("""
@@ -609,24 +672,8 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # 幻影按钮区域（键盘控制用）— JS 即时隐藏防止闪烁
+            # 幻影按钮区域（键盘控制用）
             if st.session_state.get('keyboard_control', False) and st.session_state.get('quiz_active', False):
-                st.markdown("""
-                <script>
-                (function hidePhantoms() {
-                    var btns = window.parent.document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        if (btns[i].innerText && btns[i].innerText.indexOf(':::') >= 0) {
-                            btns[i].style.display = 'none';
-                            btns[i].style.visibility = 'hidden';
-                            btns[i].style.position = 'absolute';
-                            btns[i].style.left = '-9999px';
-                        }
-                    }
-                    setTimeout(hidePhantoms, 100);
-                })();
-                </script>
-                """, unsafe_allow_html=True)
                 with st.container():
                     for i in range(6):
                         st.button(
@@ -738,8 +785,9 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                             st.rerun()
 
                 with col_end:
-                    if st.button("🏁 提前结束", type="secondary", key="early_exit_btn2", use_container_width=True):
-                        exit_confirm_dialog()
+                    if st.session_state.current_index < total_q - 1:
+                        if st.button("🏁 提前结束", type="secondary", key="early_exit_btn2", use_container_width=True):
+                            exit_confirm_dialog()
 
 # ============================================================
 # 主界面 — 页面路由
