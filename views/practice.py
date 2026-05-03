@@ -142,11 +142,9 @@ def render_practice_page():
         display_file = truncate_filename(st.session_state.current_file_name, 40)
         st.caption(f"文件: {display_file}")
 
-    # 错题重练模式返回按钮（统一逻辑）
-    if st.session_state.review_mode and st.session_state.original_bank_before_review:
-        _render_back_to_bank_button(
-            reset_all=(st.session_state.practice_mode == 'review' and not st.session_state.quiz_active)
-        )
+    # 错题重练模式返回按钮 — practice_mode='review' 时就显示，无需等开始刷题
+    if st.session_state.practice_mode == 'review' and st.session_state.original_bank_before_review:
+        _render_back_to_bank_button(reset_all=True)
 
     st.subheader("1. 选择刷题模式")
     mode_col1, mode_col2, mode_col3 = st.columns(3)
@@ -162,10 +160,15 @@ def render_practice_page():
             st.rerun()
 
     with mode_col3:
-        wrong_list = get_wrong_questions()
+        # 默认筛选当前题库的错题
+        current_file = st.session_state.get('current_file_name')
+        wrong_list = get_wrong_questions(file_filter=current_file)
+        has_wrong = len(wrong_list) > 0
         if st.button("📕 错题重练", use_container_width=True,
-                     help="专门练习错题本中的题目", disabled=len(wrong_list) == 0):
+                     help="专门练习错题本中的题目", disabled=not has_wrong):
             st.session_state.practice_mode = 'review'
+            # 默认筛选当前题库
+            st.session_state.wrong_book_filter = current_file
             # 保存原题库信息用于退出时恢复
             if not st.session_state.original_bank_before_review:
                 active_bank = get_active_question_bank()
@@ -221,7 +224,9 @@ def render_practice_settings():
     st.subheader(mode_titles.get(st.session_state.practice_mode, '刷题设置'))
 
     # 错题数据一次性加载，避免同页多次 DB 查询
-    _cached_wrong_list = get_wrong_questions() if st.session_state.practice_mode == 'review' else []
+    _cached_wrong_list = get_wrong_questions(
+        file_filter=st.session_state.get('wrong_book_filter')
+    ) if st.session_state.practice_mode == 'review' else []
 
     if st.session_state.practice_mode == 'review':
         # 错题重练：刷题模式选择
@@ -391,7 +396,10 @@ def render_practice_settings():
                 # 加载错题并按选定模式排序
                 submode = st.session_state.get('_review_submode', 'sequential')
                 sort_map = {'sequential': 'recent_random', 'random': 'random', 'error_count': 'error_count_random'}
-                loaded = get_wrong_questions(sort_by=sort_map.get(submode, 'recent_random'))
+                loaded = get_wrong_questions(
+                    sort_by=sort_map.get(submode, 'recent_random'),
+                    file_filter=st.session_state.get('wrong_book_filter')
+                )
                 # 应用题型筛选
                 if st.session_state.selected_types:
                     loaded = [w for w in loaded if w.get('题型', '') in st.session_state.selected_types]
