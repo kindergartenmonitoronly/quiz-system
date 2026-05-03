@@ -423,6 +423,27 @@ def render_confirm_step():
                 for issue in analysis['potential_issues']:
                     st.write(issue)
 
+    # 可编辑题库表格
+    st.subheader("✏️ 编辑题库（修正可疑题目）")
+    with st.expander("点击展开编辑表格", expanded=False):
+        edited_df = st.data_editor(
+            df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config={
+                '题号': st.column_config.NumberColumn('题号', width='small'),
+                '题型': st.column_config.SelectboxColumn('题型', options=['单选题', '多选题', '判断题', '填空题'], width='small'),
+                '题目': st.column_config.TextColumn('题目', width='large'),
+                '答案': st.column_config.TextColumn('答案', width='small'),
+                '解析': st.column_config.TextColumn('解析', width='medium'),
+            },
+            hide_index=True
+        )
+        if st.button("💾 应用修改", type="secondary"):
+            st.session_state.data = edited_df
+            st.success("修改已应用")
+            st.rerun()
+
     if '题型' in df.columns:
         type_counts = df['题型'].value_counts()
         type_cols = st.columns(len(type_counts))

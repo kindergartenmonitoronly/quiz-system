@@ -153,16 +153,16 @@ def render_js_timer():
                 timerDiv.style.color = "white";
                 timerDiv.style.background = "#f44336";
                 timerDiv.style.borderColor = "#d32f2f";
-                // 找到提交答案按钮（主按钮，文本包含"提交答案"）
-                setTimeout(() => {{
-                    var buttons = document.querySelectorAll('button[kind="primary"]');
-                    for (var i = 0; i < buttons.length; i++) {{
-                        if (buttons[i].innerText && buttons[i].innerText.includes('提交答案')) {{
-                            buttons[i].click();
+                // 找到并点击"提交答案"按钮触发 rerender + 后端超时检查
+                setTimeout(function() {{
+                    var allBtns = window.parent.document.querySelectorAll('button');
+                    for (var i = 0; i < allBtns.length; i++) {{
+                        if (allBtns[i].innerText && allBtns[i].innerText.indexOf('提交答案') >= 0) {{
+                            allBtns[i].click();
                             break;
                         }}
                     }}
-                }}, 800);
+                }}, 500);
                 return;
             }}
 

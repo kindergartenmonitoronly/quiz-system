@@ -261,6 +261,10 @@ def render_practice_settings():
             if 'shared_count_review' not in st.session_state:
                 st.session_state.shared_count_review = min(10, max_questions)
 
+            # 始终同步 widget key
+            st.session_state._slider_key_review = st.session_state.shared_count_review
+            st.session_state._input_key_review = st.session_state.shared_count_review
+
             def callback_slider_review():
                 st.session_state.shared_count_review = st.session_state._slider_key_review
                 st.session_state.question_count = st.session_state._slider_key_review
@@ -295,6 +299,10 @@ def render_practice_settings():
 
         if 'shared_count_regular' not in st.session_state:
             st.session_state.shared_count_regular = default_count
+
+        # 始终同步 widget key 到当前共享值，避免显示 1 的问题
+        st.session_state._slider_key_regular = st.session_state.shared_count_regular
+        st.session_state._input_key_regular = st.session_state.shared_count_regular
 
         def callback_slider_regular():
             st.session_state.shared_count_regular = st.session_state._slider_key_regular

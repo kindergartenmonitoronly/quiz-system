@@ -72,6 +72,22 @@ div[data-testid="stDataFrameResizable"] { width: 100% !important; }
 
 input[type="number"] { cursor: ns-resize; }
 
+/* 键盘控制提示 */
+.keyboard-hint-compact { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; padding: 6px 10px; margin: 0 0 8px 0; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.2); font-size: 12px; }
+.keyboard-hint-header { font-size: 13px; font-weight: bold; margin-bottom: 3px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.keyboard-hint-keys { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.keyboard-key-item { display: flex; align-items: center; gap: 3px; }
+.keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
+.keyboard-key-label { font-size: 11px; opacity: 0.9; }
+.question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+    .question-card { background: #1e1e1e !important; color: #e0e0e0 !important; box-shadow: 0 2px 8px rgba(255,255,255,0.05) !important; }
+    .stButton > button { background: #333; color: #e0e0e0; border-color: #555; }
+    .stButton > button:hover { background: #444; }
+}
+
 /* 题型色彩系统 */
 .qtype-single { border-left: 4px solid #2196F3 !important; }
 .qtype-multi  { border-left: 4px solid #9C27B0 !important; }
@@ -373,6 +389,26 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             wrong_results = [r for r in results if not r['is_correct']]
             if wrong_results:
                 st.subheader("📝 错题分析")
+                # 当场重做错题按钮
+                if st.button("🔄 只练错题 ({})".format(len(wrong_results)), type="primary"):
+                    # 从原始数据中筛选错题
+                    wrong_indices = [r['index'] for r in wrong_results]
+                    if hasattr(st.session_state, 'original_data_backup') and st.session_state.original_data_backup is not None:
+                        source_df = st.session_state.original_data_backup
+                    else:
+                        source_df = st.session_state.data
+                    wrong_df = source_df.iloc[wrong_indices].reset_index(drop=True)
+                    st.session_state.data = wrong_df
+                    st.session_state.selected_types = list(wrong_df['题型'].unique()) if '题型' in wrong_df.columns else []
+                    st.session_state.question_count = len(wrong_df)
+                    st.session_state.force_exit_results = False
+                    st.session_state.show_answer_card = False
+                    st.session_state.celebration_shown = False
+                    if 'final_quiz_time' in st.session_state:
+                        del st.session_state.final_quiz_time
+                    start_quiz('sequential')
+                    st.rerun()
+
                 for r in wrong_results:
                     st.error(f"第{r['index'] + 1}题: {r['question'][:50]}...")
         else:
@@ -435,28 +471,17 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             submit_answer_action(row)
             st.rerun()
 
-        # 键盘控制提示（题目上方）
+        # 键盘控制提示（题目上方，紧凑一行）
         if st.session_state.keyboard_control and not st.session_state.show_result:
             st.markdown("""
-            <style>
-            .keyboard-hint-compact { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px 0; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.2); font-size: 12px; }
-            .keyboard-hint-header { font-size: 13px; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; }
-            .keyboard-hint-keys { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
-            .keyboard-key-item { display: flex; align-items: center; gap: 3px; }
-            .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
-            .keyboard-key-label { font-size: 11px; opacity: 0.9; }
-            .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
-            </style>
-            """, unsafe_allow_html=True)
-
-            st.markdown("""
             <div class="keyboard-hint-compact">
-                <div class="keyboard-hint-header"><span>🎮 键盘控制已启用</span></div>
-                <div class="keyboard-hint-keys">
-                    <div class="keyboard-key-item"><span class="keyboard-key-badge">1-6</span><span class="keyboard-key-label">选择选项</span></div>
-                    <div class="keyboard-key-item"><span class="keyboard-key-badge">Enter</span><span class="keyboard-key-label">提交答案</span></div>
-                    <div class="keyboard-key-item"><span class="keyboard-key-badge">← →</span><span class="keyboard-key-label">切换题目</span></div>
-                </div>
+                <span style="font-weight:bold">🎮 键盘已启用</span>
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
+                &nbsp;|&nbsp;
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
             </div>
             """, unsafe_allow_html=True)
 
@@ -511,13 +536,22 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                             option_values.append(chr(65 + i))
 
                 if st.session_state.shuffle_mode and q_type == '单选题':
-                    # 稳定打乱：基于题目索引做种子，同一题每次渲染顺序一致
+                    # 打乱内容但保持 ABCD 标签顺序不变
                     rng = random.Random(st.session_state.current_index * 31 + hash(row['题目']) % 10007)
-                    combined = list(zip(opts, option_values))
-                    rng.shuffle(combined)
-                    opts, option_values = zip(*combined) if combined else ([], [])
-                    # 存储打乱后的选项字母顺序，供键盘回调使用
-                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = list(option_values)
+                    contents = [o[3:] for o in opts]  # 去掉 "A. " 前缀取内容
+                    indices = list(range(len(contents)))
+                    rng.shuffle(indices)
+                    # 重建选项：标签不变，内容来自打乱后的位置
+                    new_opts = []
+                    new_option_values = []
+                    for new_pos, src_idx in enumerate(indices):
+                        letter = chr(65 + new_pos)
+                        new_opts.append(f"{letter}. {contents[src_idx]}")
+                        new_option_values.append(option_values[src_idx])
+                    opts = new_opts
+                    option_values = new_option_values
+                    # 存储映射表供键盘回调使用
+                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = option_values
 
                 val = st.radio("请选择答案:", opts,
                                key=f"q_{st.session_state.current_index}",
@@ -539,15 +573,30 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
 
                 if st.session_state.shuffle_mode:
                     rng = random.Random(st.session_state.current_index * 31 + hash(row['题目']) % 10007)
-                    rng.shuffle(options)
-                    # 存储打乱后的选项字母顺序，供键盘回调使用
-                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = [o[0] for o in options]
+                    orig_letters = [o[0] for o in options]
+                    contents = [o[1] for o in options]
+                    indices = list(range(len(contents)))
+                    rng.shuffle(indices)
+                    new_options = []
+                    letter_map = {}
+                    for new_pos, src_idx in enumerate(indices):
+                        new_letter = chr(65 + new_pos)
+                        new_options.append((new_letter, contents[src_idx]))
+                        letter_map[new_letter] = orig_letters[src_idx]
+                    options = new_options
+                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = letter_map
+                    st.session_state[f'_shuffle_map_{st.session_state.current_index}'] = letter_map
 
                 for opt_key, opt_val in options:
                     if st.checkbox(f"{opt_key}. {opt_val}",
                                    key=f"mq_{opt_key}_{st.session_state.current_index}",
                                    disabled=disabled):
-                        choices.append(opt_key)
+                        # 打乱模式下将显示字母映射回原始字母
+                        if st.session_state.shuffle_mode:
+                            letter_map = st.session_state.get(f'_shuffle_map_{st.session_state.current_index}', {})
+                            choices.append(letter_map.get(opt_key, opt_key))
+                        else:
+                            choices.append(opt_key)
 
                 if choices:
                     user_choice = "".join(sorted(choices))
@@ -560,17 +609,23 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # 幻影按钮区域（键盘控制用）— 立即注入隐藏样式防止闪烁
+            # 幻影按钮区域（键盘控制用）— JS 即时隐藏防止闪烁
             if st.session_state.get('keyboard_control', False) and st.session_state.get('quiz_active', False):
                 st.markdown("""
-                <style>
-                button[kind="secondaryFormSubmit"]:has-text(":::") {
-                    display: none !important; visibility: hidden !important; opacity: 0 !important;
-                    position: absolute !important; left: -9999px !important;
-                    width: 1px !important; height: 1px !important; overflow: hidden !important;
-                    pointer-events: none !important;
-                }
-                </style>
+                <script>
+                (function hidePhantoms() {
+                    var btns = window.parent.document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i].innerText && btns[i].innerText.indexOf(':::') >= 0) {
+                            btns[i].style.display = 'none';
+                            btns[i].style.visibility = 'hidden';
+                            btns[i].style.position = 'absolute';
+                            btns[i].style.left = '-9999px';
+                        }
+                    }
+                    setTimeout(hidePhantoms, 100);
+                })();
+                </script>
                 """, unsafe_allow_html=True)
                 with st.container():
                     for i in range(6):

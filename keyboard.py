@@ -53,45 +53,43 @@ def phantom_option_callback(option_index):
         return
 
     if q_type in ['单选题', '判断题']:
-        # 处理打乱选项：从 session_state 读取预计算的打乱顺序
+        # 显示标签始终是 chr(65+option_index)，原始答案字母从打乱表获取
+        display_letter = chr(65 + option_index)
         shuffle_key = f'_shuffle_{st.session_state.current_index}'
         if st.session_state.shuffle_mode and q_type == '单选题' and shuffle_key in st.session_state:
             shuffled_values = st.session_state[shuffle_key]
             if option_index < len(shuffled_values):
-                option_letter = shuffled_values[option_index]
+                original_letter = shuffled_values[option_index]
             else:
                 return
         else:
-            option_letter = chr(65 + option_index)
+            original_letter = display_letter
 
-        option_text = f"{option_letter}. {row[f'选项{option_letter}']}"
-        st.session_state.user_answer = option_letter
+        # radio 值使用打乱后该位置的显示文本，user_answer 使用原始字母
+        option_text = f"{display_letter}. {row[f'选项{original_letter}']}"
+        st.session_state.user_answer = original_letter
         radio_key = f"q_{st.session_state.current_index}"
         st.session_state[radio_key] = option_text
 
     elif q_type == '多选题':
-        # 多选题：打乱时也需要映射索引到实际选项字母
-        shuffle_key = f'_shuffle_{st.session_state.current_index}'
-        if st.session_state.shuffle_mode and shuffle_key in st.session_state:
-            shuffled_values = st.session_state[shuffle_key]
-            if option_index < len(shuffled_values):
-                option_letter = shuffled_values[option_index]
-            else:
-                return
-        else:
-            option_letter = chr(65 + option_index)
-
+        # 打乱模式下：显示字母 = 按下的位置，需映射到原始字母
+        option_letter = chr(65 + option_index)
         checkbox_key = f"mq_{option_letter}_{st.session_state.current_index}"
         current_state = st.session_state.get(checkbox_key, False)
         new_state = not current_state
         st.session_state[checkbox_key] = new_state
 
+        # 构建用户答案：将选中的显示字母映射回原始字母
+        letter_map = st.session_state.get(f'_shuffle_map_{st.session_state.current_index}', {})
         selected_letters = []
         for i in range(6):
-            letter = chr(65 + i)
-            key = f"mq_{letter}_{st.session_state.current_index}"
+            display_letter = chr(65 + i)
+            key = f"mq_{display_letter}_{st.session_state.current_index}"
             if st.session_state.get(key, False):
-                selected_letters.append(letter)
+                if letter_map and display_letter in letter_map:
+                    selected_letters.append(letter_map[display_letter])
+                else:
+                    selected_letters.append(display_letter)
 
         st.session_state.user_answer = ''.join(sorted(selected_letters))
 
