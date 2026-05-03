@@ -80,8 +80,6 @@ input[type="number"] { cursor: ns-resize; }
 .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
 .keyboard-key-label { font-size: 11px; opacity: 0.9; }
 .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
-/* 消除 Streamlit 块之间的多余间距 */
-div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] { gap: 0 !important; }
 
 /* 深色模式 */
 @media (prefers-color-scheme: dark) {
@@ -534,21 +532,20 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             submit_answer_action(row)
             st.rerun()
 
-        # 键盘控制提示（题目上方，紧凑一行）
-        if st.session_state.keyboard_control and not st.session_state.show_result:
-            st.markdown("""
-            <div class="keyboard-hint-compact">
-                <span style="font-weight:bold">🎮 键盘已启用</span>
-                &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
-                &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
-                &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
-            </div>
-            """, unsafe_allow_html=True)
-
         with st.container():
+            # 键盘控制提示（题目上方，紧凑一行，放在 container 内避免额外块间距）
+            if st.session_state.keyboard_control and not st.session_state.show_result:
+                components.html("""
+                <div class="keyboard-hint-compact" style="margin-bottom:0">
+                    <span style="font-weight:bold">🎮 键盘已启用</span>
+                    &nbsp;|&nbsp;
+                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
+                    &nbsp;|&nbsp;
+                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
+                    &nbsp;|&nbsp;
+                    <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
+                </div>
+                """, height=32)
             st.markdown(f'<div class="question-card qtype-{question_type_css(row)}">', unsafe_allow_html=True)
 
             col_info1, col_info2, col_timer = st.columns([6, 2, 2])

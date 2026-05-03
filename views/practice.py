@@ -114,6 +114,12 @@ def render_practice_page():
                 st.session_state.current_bank_file = selected_bank['file_name']
                 st.session_state.current_bank_id = selected_bank['id']
                 st.session_state.selected_types = []
+                # 重置题目数量相关状态，避免新题库题目数少于旧值导致 slider 越界
+                for key in ['shared_count_regular', '_slider_key_regular', '_input_key_regular',
+                            'shared_count_review', '_slider_key_review', '_input_key_review',
+                            'question_count']:
+                    if key in st.session_state:
+                        del st.session_state[key]
                 st.rerun()
 
     df = st.session_state.data
@@ -224,30 +230,11 @@ def render_practice_settings():
     _cached_wrong_list = get_wrong_questions() if st.session_state.practice_mode == 'review' else []
 
     if st.session_state.practice_mode == 'review':
-        wrong_files = get_wrong_book_files()
-
-        col_filter1, col_filter2 = st.columns(2)
-
-        with col_filter1:
-            if wrong_files:
-                filter_options = ['全部'] + wrong_files
-                current_filter = st.session_state.get('wrong_book_filter', '全部')
-                selected_filter = st.selectbox(
-                    "选择题库", filter_options,
-                    index=filter_options.index(current_filter) if current_filter in filter_options else 0,
-                    help="选择要重练错题的题库"
-                )
-                st.session_state.wrong_book_filter = selected_filter
-            else:
-                st.info("暂无错题记录")
-                st.session_state.wrong_book_filter = '全部'
-                st.selectbox("选择题库", ["全部"], index=0, disabled=True)
-
-        with col_filter2:
-            all_types = df['题型'].unique()
-            default_types = list(all_types) if len(all_types) > 0 else []
-            selected = st.multiselect("选择题型", all_types, default=default_types, help="选择要练习的题型")
-            st.session_state.selected_types = selected
+        # 错题重练模式只显示题型筛选，题库筛选在错题本页已完成
+        all_types = df['题型'].unique()
+        default_types = list(all_types) if len(all_types) > 0 else []
+        selected = st.multiselect("选择题型", all_types, default=default_types, help="选择要练习的题型")
+        st.session_state.selected_types = selected
 
     else:
         col_set1, col_set2 = st.columns(2)
