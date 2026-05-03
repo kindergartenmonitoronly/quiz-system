@@ -571,3 +571,41 @@ def add_wheel_support():
     })();
     </script>
     """, height=0)
+
+
+# ============================================================
+# 键盘快捷键配置
+# ============================================================
+
+KEY_PROFILES = {
+    '默认': {
+        'select': ['1', '2', '3', '4', '5', '6'],
+        'submit': ['Enter'],
+        'prev': ['ArrowLeft'],
+        'next': ['ArrowRight'],
+        'exit': ['Escape'],
+        'desc': '数字键1-6选择，Enter提交，方向键切换'
+    },
+    'WASD风格': {
+        'select': ['a', 'b', 'c', 'd', 'e', 'f'],
+        'submit': [' '],
+        'prev': ['q'],
+        'next': ['w'],
+        'exit': ['Escape'],
+        'desc': 'A-F选择，Space提交，Q/W切换'
+    },
+    '左手模式': {
+        'select': ['q', 'w', 'e', 'r', 't', 'y'],
+        'submit': ['Enter'],
+        'prev': ['a'],
+        'next': ['s'],
+        'exit': ['Escape'],
+        'desc': 'QWERTY选择，Enter提交，A/S切换'
+    },
+}
+
+
+def get_key_profile():
+    """获取当前键盘配置"""
+    name = st.session_state.get('key_profile', '默认')
+    return KEY_PROFILES.get(name, KEY_PROFILES['默认'])

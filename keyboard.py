@@ -5,6 +5,7 @@
 - 滚轮支持
 """
 import time
+import json
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -12,6 +13,7 @@ from quiz_engine import (
     get_current_question_and_total, submit_answer_action,
     start_question_timer, is_question_answered, get_total_questions
 )
+from utils import get_key_profile
 
 
 # ============================================================
@@ -92,6 +94,13 @@ def phantom_option_callback(option_index):
                     selected_letters.append(display_letter)
 
         st.session_state.user_answer = ''.join(sorted(selected_letters))
+
+
+def phantom_exit_callback():
+    """Esc 键：触发退出确认弹窗"""
+    if not st.session_state.get('quiz_active', False):
+        return
+    st.session_state.show_exit_confirm = True
 
 
 def phantom_enter_callback():
@@ -257,251 +266,171 @@ def show_keyboard_error_feedback(message):
 # ============================================================
 
 def render_keyboard_controls():
-    """渲染键盘控制JS代码 - 幻影按钮方案"""
+    """渲染键盘控制JS代码 — 支持可配置快捷键"""
     if not st.session_state.get('quiz_active', False) or not st.session_state.get('keyboard_control', False):
         return
 
-    components.html(
-        """
-        <script>
-        (function() {
-            const doc = window.parent.document;
-            let isProcessing = false;
+    profile = get_key_profile()
+    kb_json = json.dumps(profile)
 
-            function hidePhantomButtons() {
-                const buttons = doc.querySelectorAll('button');
-                buttons.forEach(btn => {
-                    if (btn.innerText && btn.innerText.includes(":::")) {
-                        btn.style.position = 'fixed';
-                        btn.style.opacity = '0';
-                        btn.style.pointerEvents = 'none';
-                        btn.style.zIndex = '-1';
-                        btn.style.left = '0';
-                        btn.style.top = '0';
-                        btn.style.height = '1px';
-                        btn.style.width = '1px';
-                        btn.style.overflow = 'hidden';
-                    }
-                });
+    js_code = """<script>
+(function() {
+    const doc = window.parent.document;
+    let isProcessing = false;
+    const KB = __KB_JSON__;
+
+    function hidePhantomButtons() {
+        const buttons = doc.querySelectorAll('button');
+        buttons.forEach(function(btn) {
+            if (btn.innerText && btn.innerText.indexOf(":::") >= 0) {
+                btn.style.position = 'fixed'; btn.style.opacity = '0';
+                btn.style.pointerEvents = 'none'; btn.style.zIndex = '-1';
+                btn.style.left = '0'; btn.style.top = '0';
+                btn.style.height = '1px'; btn.style.width = '1px';
+                btn.style.overflow = 'hidden';
             }
+        });
+    }
 
-            function clickByText(keyword) {
-                try {
-                    const buttons = Array.from(doc.querySelectorAll('button'));
-                    const target = buttons.find(btn =>
-                        btn.innerText && btn.innerText.includes(keyword)
-                    );
-                    if (target) {
-                        target.click();
-                        return true;
-                    }
-                    return false;
-                } catch (err) {
-                    return false;
-                }
+    function clickByText(keyword) {
+        try {
+            var buttons = Array.from(doc.querySelectorAll('button'));
+            var target = buttons.find(function(btn) {
+                return btn.innerText && btn.innerText.indexOf(keyword) >= 0;
+            });
+            if (target) { target.click(); return true; }
+            return false;
+        } catch (err) { return false; }
+    }
+
+    var handleKeydown = function(e) {
+        var activeTag = doc.activeElement.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+            if (doc.activeElement.type === 'text') return;
+        }
+
+        var key = e.key;
+        if (isProcessing) return;
+
+        // 选择选项键
+        var selIdx = KB.select.indexOf(key);
+        if (selIdx >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            isProcessing = true;
+            clickByText(':::OPT_' + selIdx + ':::');
+            highlightOptionFeedback(selIdx);
+            setTimeout(function() { isProcessing = false; }, 50);
+            return;
+        }
+        // 提交键
+        if (KB.submit.indexOf(key) >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            isProcessing = true;
+            clickByText(':::NAV_ENTER:::');
+            highlightEnterFeedback();
+            setTimeout(function() { isProcessing = false; }, 100);
+            return;
+        }
+        // 导航键 - 上一题
+        if (KB.prev.indexOf(key) >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            isProcessing = true;
+            clickByText(':::NAV_PREV:::');
+            highlightArrowFeedback(key);
+            setTimeout(function() { isProcessing = false; }, 100);
+            return;
+        }
+        // 导航键 - 下一题
+        if (KB.next.indexOf(key) >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            isProcessing = true;
+            clickByText(':::NAV_NEXT:::');
+            highlightArrowFeedback(key);
+            setTimeout(function() { isProcessing = false; }, 100);
+            return;
+        }
+        // 退出键
+        if (KB.exit.indexOf(key) >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            clickByText(':::NAV_EXIT:::');
+            return;
+        }
+    };
+
+    function highlightOptionFeedback(index) {
+        var mainSection = doc.querySelector('section[data-testid="stMain"]');
+        if (!mainSection) return;
+        var radios = mainSection.querySelectorAll('div[data-testid="stRadio"] label');
+        if (radios && index < radios.length) {
+            var label = radios[index];
+            var originalBg = label.style.backgroundColor;
+            label.style.backgroundColor = '#e3f2fd';
+            label.style.transition = 'background-color 0.3s';
+            setTimeout(function() { label.style.backgroundColor = originalBg || ''; }, 300);
+        }
+        var checkboxes = mainSection.querySelectorAll('div[data-testid="stCheckbox"] label');
+        if (checkboxes && index < checkboxes.length) {
+            var label = checkboxes[index];
+            var originalBg = label.style.backgroundColor;
+            label.style.backgroundColor = '#e3f2fd';
+            label.style.transition = 'background-color 0.3s';
+            setTimeout(function() { label.style.backgroundColor = originalBg || ''; }, 300);
+        }
+        showFloatingHint('按键 ' + (index + 1));
+    }
+
+    function highlightEnterFeedback() {
+        showFloatingHint('提交答案');
+        var buttons = Array.from(doc.querySelectorAll('button'));
+        var submitBtn = buttons.find(function(btn) {
+            return btn.innerText && btn.innerText.indexOf('提交') >= 0;
+        });
+        if (submitBtn) {
+            var bg = submitBtn.style.backgroundColor;
+            submitBtn.style.backgroundColor = '#4CAF50';
+            submitBtn.style.color = 'white';
+            setTimeout(function() { submitBtn.style.backgroundColor = bg || ''; submitBtn.style.color = ''; }, 300);
+        }
+    }
+
+    function highlightArrowFeedback(key) {
+        var dir = KB.prev.indexOf(key) >= 0 ? '上一题' : '下一题';
+        showFloatingHint(dir);
+    }
+
+    function showFloatingHint(text) {
+        var existing = doc.getElementById('keyboard-feedback-hint');
+        if (existing) existing.remove();
+        var hint = doc.createElement('div');
+        hint.id = 'keyboard-feedback-hint';
+        hint.innerHTML = '<div style="position:fixed;top:100px;right:30px;background:rgba(76,175,80,0.9);color:white;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:bold;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.2);backdrop-filter:blur(5px);animation:fadeInOut 1s ease-in-out;border:1px solid rgba(255,255,255,0.2)">🎮 ' + text + '</div>';
+        var style = doc.createElement('style');
+        style.textContent = '@keyframes fadeInOut { 0%{opacity:0;transform:translateY(-20px)} 20%{opacity:1;transform:translateY(0)} 80%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-20px)} }';
+        doc.head.appendChild(style);
+        doc.body.appendChild(hint);
+        setTimeout(function() { if (hint.parentNode) hint.parentNode.removeChild(hint); }, 1000);
+    }
+
+    function initKeyboard() {
+        try {
+            doc.removeEventListener('keydown', handleKeydown);
+            doc.addEventListener('keydown', handleKeydown, { capture: true });
+            hidePhantomButtons();
+            if (!window.phantomObserver) {
+                window.phantomObserver = new MutationObserver(function() { hidePhantomButtons(); });
+                window.phantomObserver.observe(doc.body, { childList: true, subtree: true, attributes: true });
             }
+        } catch (err) { console.error('键盘控制初始化失败:', err); }
+    }
 
-            const handleKeydown = (e) => {
-                const activeTag = doc.activeElement.tagName;
-                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) {
-                    if (doc.activeElement.type === 'text') {
-                        return;
-                    }
-                }
+    setTimeout(function() { initKeyboard(); }, 1000);
 
-                const key = e.key;
+    window.__cleanupPhantomKeyboard = function() {
+        if (window.phantomObserver) { window.phantomObserver.disconnect(); window.phantomObserver = null; }
+        doc.removeEventListener('keydown', handleKeydown);
+    };
 
-                if (key >= '1' && key <= '6') {
-                    e.preventDefault();
-                    e.stopPropagation();
+})();
+</script>"""
 
-                    if (isProcessing) return;
-                    isProcessing = true;
-
-                    const index = parseInt(key) - 1;
-                    clickByText(`:::OPT_${index}:::`);
-                    highlightOptionFeedback(index);
-
-                    setTimeout(() => {
-                        isProcessing = false;
-                    }, 50);
-                    return;
-                }
-
-                if (key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if (isProcessing) return;
-                    isProcessing = true;
-
-                    clickByText(":::NAV_ENTER:::");
-                    highlightEnterFeedback();
-
-                    setTimeout(() => {
-                        isProcessing = false;
-                    }, 100);
-                    return;
-                }
-
-                if (key === 'ArrowLeft' || key === 'ArrowRight') {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if (isProcessing) return;
-                    isProcessing = true;
-
-                    const keyword = key === 'ArrowLeft' ? ":::NAV_PREV:::" : ":::NAV_NEXT:::";
-                    clickByText(keyword);
-                    highlightArrowFeedback(key);
-
-                    setTimeout(() => {
-                        isProcessing = false;
-                    }, 100);
-                    return;
-                }
-            };
-
-            function highlightOptionFeedback(index) {
-                const mainSection = doc.querySelector('section[data-testid="stMain"]');
-                if (!mainSection) return;
-
-                const radios = mainSection.querySelectorAll('div[data-testid="stRadio"] label');
-                if (radios && index < radios.length) {
-                    const label = radios[index];
-                    const originalBg = label.style.backgroundColor;
-                    label.style.backgroundColor = '#e3f2fd';
-                    label.style.transition = 'background-color 0.3s';
-
-                    setTimeout(() => {
-                        label.style.backgroundColor = originalBg || '';
-                    }, 300);
-                }
-
-                const checkboxes = mainSection.querySelectorAll('div[data-testid="stCheckbox"] label');
-                if (checkboxes && index < checkboxes.length) {
-                    const label = checkboxes[index];
-                    const originalBg = label.style.backgroundColor;
-                    label.style.backgroundColor = '#e3f2fd';
-                    label.style.transition = 'background-color 0.3s';
-
-                    setTimeout(() => {
-                        label.style.backgroundColor = originalBg || '';
-                    }, 300);
-                }
-
-                showFloatingHint(`按键 ${index + 1}`);
-            }
-
-            function highlightEnterFeedback() {
-                showFloatingHint('提交答案');
-
-                const buttons = Array.from(doc.querySelectorAll('button'));
-                const submitBtn = buttons.find(btn =>
-                    btn.innerText && (btn.innerText.includes('提交') || btn.innerText.includes('下一题'))
-                );
-                if (submitBtn) {
-                    const originalBg = submitBtn.style.backgroundColor;
-                    submitBtn.style.backgroundColor = '#4CAF50';
-                    submitBtn.style.color = 'white';
-
-                    setTimeout(() => {
-                        submitBtn.style.backgroundColor = originalBg || '';
-                        submitBtn.style.color = '';
-                    }, 300);
-                }
-            }
-
-            function highlightArrowFeedback(key) {
-                const direction = key === 'ArrowLeft' ? '上一题' : '下一题';
-                showFloatingHint(direction);
-            }
-
-            function showFloatingHint(text) {
-                const existingHint = doc.getElementById('keyboard-feedback-hint');
-                if (existingHint) {
-                    existingHint.remove();
-                }
-
-                const hint = doc.createElement('div');
-                hint.id = 'keyboard-feedback-hint';
-                hint.innerHTML = `
-                    <div style="
-                        position: fixed;
-                        top: 100px;
-                        right: 30px;
-                        background: rgba(76, 175, 80, 0.9);
-                        color: white;
-                        padding: 10px 20px;
-                        border-radius: 20px;
-                        font-size: 14px;
-                        font-weight: bold;
-                        z-index: 99999;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-                        backdrop-filter: blur(5px);
-                        animation: fadeInOut 1s ease-in-out;
-                        border: 1px solid rgba(255,255,255,0.2);
-                    ">
-                        🎮 ${text}
-                    </div>
-                `;
-
-                const style = doc.createElement('style');
-                style.textContent = `
-                    @keyframes fadeInOut {
-                        0% { opacity: 0; transform: translateY(-20px); }
-                        20% { opacity: 1; transform: translateY(0); }
-                        80% { opacity: 1; transform: translateY(0); }
-                        100% { opacity: 0; transform: translateY(-20px); }
-                    }
-                `;
-
-                doc.head.appendChild(style);
-                doc.body.appendChild(hint);
-
-                setTimeout(() => {
-                    if (hint.parentNode) {
-                        hint.parentNode.removeChild(hint);
-                    }
-                }, 1000);
-            }
-
-            function initKeyboard() {
-                try {
-                    doc.removeEventListener('keydown', handleKeydown);
-                    doc.addEventListener('keydown', handleKeydown, { capture: true });
-
-                    hidePhantomButtons();
-
-                    if (!window.phantomObserver) {
-                        window.phantomObserver = new MutationObserver(() => {
-                            hidePhantomButtons();
-                        });
-                        window.phantomObserver.observe(doc.body, {
-                            childList: true,
-                            subtree: true,
-                            attributes: true
-                        });
-                    }
-                } catch (err) {
-                    console.error('键盘控制初始化失败:', err);
-                }
-            }
-
-            setTimeout(() => {
-                initKeyboard();
-            }, 1000);
-
-            window.__cleanupPhantomKeyboard = function() {
-                if (window.phantomObserver) {
-                    window.phantomObserver.disconnect();
-                    window.phantomObserver = null;
-                }
-                doc.removeEventListener('keydown', handleKeydown);
-            };
-
-        })();
-        </script>
-        """,
-        height=0,
-    )
+    components.html(js_code.replace('__KB_JSON__', kb_json), height=0)

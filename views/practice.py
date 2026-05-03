@@ -9,7 +9,7 @@ from database import (
     get_all_study_progress
 )
 from quiz_engine import start_quiz
-from utils import truncate_filename, add_wheel_support
+from utils import truncate_filename, add_wheel_support, KEY_PROFILES
 
 
 def _render_back_to_bank_button(reset_all=False):
@@ -368,11 +368,21 @@ def render_practice_settings():
         with col_key1:
             st.session_state.keyboard_control = st.checkbox(
                 "启用键盘控制", value=st.session_state.keyboard_control,
-                help="启用键盘控制答题（数字键选择选项，Enter提交）"
+                help="启用键盘控制答题"
             )
         with col_key2:
             if st.session_state.keyboard_control:
-                st.info("📝 使用说明：\n• 数字键1-6选择对应选项\n• Enter键提交答案\n• ← → 键切换题目")
+                current_profile = st.session_state.get('key_profile', '默认')
+                selected = st.selectbox(
+                    "快捷键方案",
+                    list(KEY_PROFILES.keys()),
+                    index=list(KEY_PROFILES.keys()).index(current_profile),
+                    help="选择键盘快捷键方案"
+                )
+                if selected != current_profile:
+                    st.session_state.key_profile = selected
+                    st.rerun()
+                st.caption(KEY_PROFILES[selected]['desc'])
             else:
                 st.info("禁用键盘控制")
 

@@ -14,7 +14,7 @@ from database import (
     save_study_stats_with_consistent_time, delete_wrong_question,
     get_all_question_banks, get_all_study_progress
 )
-from utils import format_time, truncate_filename, question_type_css
+from utils import format_time, truncate_filename, question_type_css, KEY_PROFILES
 from quiz_engine import (
     start_quiz, submit_answer_action, restore_original_data,
     get_current_question_and_total, check_timeout_logic,
@@ -23,7 +23,7 @@ from quiz_engine import (
 from keyboard import (
     phantom_option_callback, phantom_enter_callback,
     phantom_prev_callback, phantom_next_callback,
-    render_keyboard_controls
+    phantom_exit_callback, render_keyboard_controls
 )
 from ui_components import render_answer_card
 from views import (
@@ -535,15 +535,20 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
         # 构建题目卡片 HTML（键盘提示 + 卡片开头合并为一个 st.markdown 消除间隙）
         card_html = ''
         if st.session_state.keyboard_control and not st.session_state.show_result:
-            card_html += '''
+            profile = KEY_PROFILES.get(st.session_state.get('key_profile', '默认'), KEY_PROFILES['默认'])
+            sel_keys = '/'.join(profile['select'][:3]) + '…'
+            sub_key = profile['submit'][0] if profile['submit'] else 'Enter'
+            prev_key = profile['prev'][0] if profile['prev'] else '←'
+            next_key = profile['next'][0] if profile['next'] else '→'
+            card_html += f'''
             <div class="keyboard-hint-compact">
                 <span style="font-weight:bold">🎮 键盘已启用</span>
                 &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">1-6</span> 选择
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">{sel_keys}</span> 选择
                 &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">Enter</span> 提交
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">{sub_key}</span> 提交
                 &nbsp;|&nbsp;
-                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">← →</span> 切换
+                <span class="keyboard-key-badge" style="display:inline;margin:0 3px">{prev_key}/{next_key}</span> 切换
             </div>
             '''
         card_html += f'<div class="question-card qtype-{question_type_css(row)}">'
@@ -701,6 +706,11 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                         key=f"phantom_enter_{st.session_state.current_index}",
                         on_click=phantom_enter_callback,
                         disabled=st.session_state.get('show_result', False),
+                    )
+                    st.button(
+                        ":::NAV_EXIT:::",
+                        key=f"phantom_exit_{st.session_state.current_index}",
+                        on_click=phantom_exit_callback,
                     )
 
             # 操作按钮

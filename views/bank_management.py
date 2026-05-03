@@ -8,6 +8,10 @@ from database import (
 )
 from utils import truncate_filename
 
+TYPE_COLORS = {
+    '单选题': '#2196F3', '多选题': '#9C27B0', '判断题': '#FF9800', '填空题': '#009688'
+}
+
 
 def render_bank_management():
     """渲染题库管理页面"""
@@ -26,67 +30,92 @@ def render_bank_management():
             active_banks = [b for b in banks if b['is_active'] == 1]
             if active_banks:
                 active_bank = active_banks[0]
-                display_name = truncate_filename(active_bank['bank_name'], 30)
-                st.info(f"当前使用: {display_name} ({active_bank['total_questions']}题)")
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-radius:10px;
+                padding:12px 16px;border-left:4px solid #4CAF50">
+                    <span style="color:#2e7d32;font-weight:bold">✅ 当前题库</span><br>
+                    <span style="font-size:16px">{active_bank['bank_name']}</span>
+                    <span style="color:#666;margin-left:8px">{active_bank['total_questions']}题</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-    if banks:
-        st.subheader("📋 题库列表")
-
-        for bank in banks:
-            with st.container():
-                col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
-
-                with col1:
-                    if bank['is_active']:
-                        st.markdown(f"**✅ {bank['bank_name']}**")
-                    else:
-                        st.markdown(f"**📂 {bank['bank_name']}**")
-
-                    display_file = truncate_filename(bank['file_name'], 25)
-                    st.caption(f"文件: {display_file} | {bank['total_questions']}题")
-
-                    if bank['question_types']:
-                        type_str = ", ".join([f"{k}:{v}" for k, v in bank['question_types'].items()])
-                        st.caption(f"题型: {type_str}")
-
-                with col2:
-                    if bank['import_time']:
-                        import_date = bank['import_time'].split()[0] if isinstance(bank['import_time'], str) else bank['import_time']
-                        st.caption(f"导入: {import_date}")
-
-                with col3:
-                    if not bank['is_active']:
-                        if st.button("使用", key=f"use_{bank['id']}", use_container_width=True):
-                            if activate_question_bank(bank['id']):
-                                df = load_questions_from_bank(bank['id'])
-                                if not df.empty:
-                                    st.session_state.data = df
-                                    st.session_state.current_file_name = bank['file_name']
-                                    st.session_state.current_bank_name = bank['bank_name']
-                                    st.session_state.current_bank_file = bank['file_name']
-                                    st.session_state.current_bank_id = bank['id']
-                                    st.success(f"已切换到题库: {bank['bank_name']}")
-                                    time.sleep(1)
-                                    st.rerun()
-
-                with col4:
-                    if st.button("删除", key=f"del_{bank['id']}", type="secondary", use_container_width=True):
-                        if delete_question_bank(bank['id']):
-                            st.success(f"已删除题库: {bank['bank_name']}")
-                            time.sleep(1)
-                            st.rerun()
-
-                st.divider()
-    else:
+    if not banks:
         st.info("暂无题库，请先导入题库")
         st.markdown("""
         ### 💡 题库管理功能说明
-
-        1. **导入题库**：点击上方"导入新题库"按钮，导入您的题库文件
-        2. **保存题库**：导入时会自动保存到题库库，避免重复导入
-        3. **切换题库**：在题库列表中点击"使用"按钮切换不同题库
-        4. **删除题库**：可以删除不再需要的题库
-        5. **当前题库**：标有✅的为当前正在使用的题库
-
-        题库管理功能让您可以轻松管理多个题库，无需重复导入相同文件。
+        1. **导入题库**：点击上方"导入新题库"按钮
+        2. **自动去重**：相同题库不会重复导入
+        3. **一键切换**：在题库卡片中点击"使用"切换
+        4. **安全删除**：当前使用的题库不会被误删
         """)
+        return
+
+    st.subheader(f"📋 题库列表 ({len(banks)}个)")
+
+    for bank in banks:
+        is_active = bank['is_active'] == 1
+        border_color = '#4CAF50' if is_active else '#e0e0e0'
+        bg_color = '#f1f8e9' if is_active else '#fafafa'
+        badge_text = '✅ 使用中' if is_active else '📂 待用'
+
+        # 构建题型标签
+        type_tags = ''
+        if bank['question_types']:
+            for qtype, count in bank['question_types'].items():
+                color = TYPE_COLORS.get(qtype, '#757575')
+                type_tags += f'<span style="display:inline-block;background:{color};color:white;padding:2px 8px;border-radius:10px;font-size:11px;margin:2px">{qtype} {count}</span> '
+
+        # 导入日期
+        import_date = ''
+        if bank['import_time']:
+            raw = bank['import_time']
+            import_date = raw.split()[0] if isinstance(raw, str) else str(raw)[:10]
+
+        st.markdown(f"""
+        <div style="background:{bg_color};border:1px solid {border_color};border-radius:12px;
+        padding:16px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <span style="font-size:16px;font-weight:bold">{bank['bank_name']}</span>
+                    <span style="background:{'#4CAF50' if is_active else '#9e9e9e'};color:white;
+                    padding:2px 10px;border-radius:10px;font-size:11px;margin-left:8px">{badge_text}</span>
+                </div>
+                <div style="color:#888;font-size:12px">{import_date}</div>
+            </div>
+            <div style="margin:8px 0;color:#666;font-size:13px">
+                文件: {truncate_filename(bank['file_name'], 30)} &nbsp;|&nbsp; 共 <b>{bank['total_questions']}</b> 题
+            </div>
+            <div style="margin:6px 0">{type_tags}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_use, col_del, col_spacer = st.columns([1, 1, 4])
+        with col_use:
+            if not is_active:
+                if st.button("✅ 使用", key=f"use_{bank['id']}", use_container_width=True):
+                    if activate_question_bank(bank['id']):
+                        df = load_questions_from_bank(bank['id'])
+                        if not df.empty:
+                            st.session_state.data = df
+                            st.session_state.current_file_name = bank['file_name']
+                            st.session_state.current_bank_name = bank['bank_name']
+                            st.session_state.current_bank_file = bank['file_name']
+                            st.session_state.current_bank_id = bank['id']
+                            # 重置计数状态
+                            for k in ['shared_count_regular', '_slider_key_regular', '_input_key_regular',
+                                       'shared_count_review', '_slider_key_review', '_input_key_review',
+                                       'question_count', 'selected_types', 'practice_mode']:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+                            st.success(f"已切换到: {bank['bank_name']}")
+                            time.sleep(0.5)
+                            st.rerun()
+            else:
+                st.button("✅ 使用", key=f"use_{bank['id']}", disabled=True, use_container_width=True)
+
+        with col_del:
+            if st.button("🗑️ 删除", key=f"del_{bank['id']}", use_container_width=True):
+                if delete_question_bank(bank['id']):
+                    st.toast(f"已删除: {bank['bank_name']}")
+                    time.sleep(0.5)
+                    st.rerun()
