@@ -53,14 +53,34 @@ def phantom_option_callback(option_index):
         return
 
     if q_type in ['单选题', '判断题']:
-        option_letter = chr(65 + option_index)
+        # 处理打乱选项：从 session_state 读取预计算的打乱顺序
+        shuffle_key = f'_shuffle_{st.session_state.current_index}'
+        if st.session_state.shuffle_mode and q_type == '单选题' and shuffle_key in st.session_state:
+            shuffled_values = st.session_state[shuffle_key]
+            if option_index < len(shuffled_values):
+                option_letter = shuffled_values[option_index]
+            else:
+                return
+        else:
+            option_letter = chr(65 + option_index)
+
         option_text = f"{option_letter}. {row[f'选项{option_letter}']}"
         st.session_state.user_answer = option_letter
         radio_key = f"q_{st.session_state.current_index}"
         st.session_state[radio_key] = option_text
 
     elif q_type == '多选题':
-        option_letter = chr(65 + option_index)
+        # 多选题：打乱时也需要映射索引到实际选项字母
+        shuffle_key = f'_shuffle_{st.session_state.current_index}'
+        if st.session_state.shuffle_mode and shuffle_key in st.session_state:
+            shuffled_values = st.session_state[shuffle_key]
+            if option_index < len(shuffled_values):
+                option_letter = shuffled_values[option_index]
+            else:
+                return
+        else:
+            option_letter = chr(65 + option_index)
+
         checkbox_key = f"mq_{option_letter}_{st.session_state.current_index}"
         current_state = st.session_state.get(checkbox_key, False)
         new_state = not current_state

@@ -153,10 +153,16 @@ def render_js_timer():
                 timerDiv.style.color = "white";
                 timerDiv.style.background = "#f44336";
                 timerDiv.style.borderColor = "#d32f2f";
+                // 找到提交答案按钮（主按钮，文本包含"提交答案"）
                 setTimeout(() => {{
-                    var submitBtn = document.querySelector('[data-testid="baseButton-secondary"]');
-                    if (submitBtn) submitBtn.click();
-                }}, 1000);
+                    var buttons = document.querySelectorAll('button[kind="primary"]');
+                    for (var i = 0; i < buttons.length; i++) {{
+                        if (buttons[i].innerText && buttons[i].innerText.includes('提交答案')) {{
+                            buttons[i].click();
+                            break;
+                        }}
+                    }}
+                }}, 800);
                 return;
             }}
 
@@ -227,6 +233,11 @@ def start_quiz(mode, continue_progress=False, progress_data=None):
         else:
             st.session_state.question_results = question_results_json
 
+        # 恢复原题目数量设置
+        saved_total = progress_data.get('total_questions', 0)
+        if saved_total > 0:
+            st.session_state.question_count = saved_total
+
         if progress_data.get('practice_mode') == 'review':
             st.session_state.review_mode = True
             st.session_state.current_file_name = "错题重练"
@@ -237,10 +248,23 @@ def start_quiz(mode, continue_progress=False, progress_data=None):
         elif progress_data.get('practice_mode') == 'sequential':
             st.session_state.random_mode = False
             st.session_state.review_mode = False
+            # 顺序模式：重建索引队列（使用保存的题目数）
+            df = st.session_state.data
+            if not st.session_state.selected_types:
+                filtered_df = df
+            else:
+                filtered_df = df[df['题型'].isin(st.session_state.selected_types)]
+            quiz_indices = filtered_df.index.tolist()[:saved_total] if saved_total else filtered_df.index.tolist()
+            st.session_state.quiz_queue_indices = quiz_indices
+            st.session_state.random_indices = []
 
         st.session_state.question_start_time = time.time()
         st.success(
-            f"已加载上次进度: 已完成 {progress_data.get('current_index', 0)}/{progress_data.get('total_questions', 0)} 题")
+            f"已加载上次进度: 已完成 {progress_data.get('current_index', 0)}/{saved_total} 题")
+
+        st.session_state.sidebar_collapsed = True
+        start_question_timer()
+        return
 
     elif mode == 'review':
         st.session_state.review_mode = True

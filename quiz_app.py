@@ -151,7 +151,7 @@ with st.sidebar:
             st.caption(f"题库: {truncate_filename(st.session_state.current_bank_name, 15)}")
 
         row, total_q = get_current_question_and_total()
-        if row and total_q:
+        if row is not None and total_q:
             progress_pct = (st.session_state.current_index + 1) / total_q
             st.progress(progress_pct, text=f"进度 {st.session_state.current_index + 1}/{total_q}")
             if '题型' in row:
@@ -435,6 +435,31 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             submit_answer_action(row)
             st.rerun()
 
+        # 键盘控制提示（题目上方）
+        if st.session_state.keyboard_control and not st.session_state.show_result:
+            st.markdown("""
+            <style>
+            .keyboard-hint-compact { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px 0; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.2); font-size: 12px; }
+            .keyboard-hint-header { font-size: 13px; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+            .keyboard-hint-keys { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+            .keyboard-key-item { display: flex; align-items: center; gap: 3px; }
+            .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
+            .keyboard-key-label { font-size: 11px; opacity: 0.9; }
+            .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown("""
+            <div class="keyboard-hint-compact">
+                <div class="keyboard-hint-header"><span>🎮 键盘控制已启用</span></div>
+                <div class="keyboard-hint-keys">
+                    <div class="keyboard-key-item"><span class="keyboard-key-badge">1-6</span><span class="keyboard-key-label">选择选项</span></div>
+                    <div class="keyboard-key-item"><span class="keyboard-key-badge">Enter</span><span class="keyboard-key-label">提交答案</span></div>
+                    <div class="keyboard-key-item"><span class="keyboard-key-badge">← →</span><span class="keyboard-key-label">切换题目</span></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
         with st.container():
             st.markdown(f'<div class="question-card qtype-{question_type_css(row)}">', unsafe_allow_html=True)
 
@@ -449,7 +474,7 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                     st.markdown(f"### {display_number}")
                 else:
                     st.markdown(f"### Q{st.session_state.current_index + 1}")
-                st.markdown(f"**{row['题目']}**")
+                st.markdown(f'<div class="question-text">{row["题目"]}</div>', unsafe_allow_html=True)
 
             with col_info2:
                 st.metric("进度", f"{st.session_state.current_index + 1}/{total_q}")
@@ -463,30 +488,6 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             with col_timer:
                 if not st.session_state.show_result:
                     render_js_timer()
-
-            if st.session_state.keyboard_control and not st.session_state.show_result:
-                st.markdown("""
-                <style>
-                .keyboard-hint-compact { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; padding: 10px 15px; margin: 0 0 15px 0; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.2); font-size: 13px; }
-                .keyboard-hint-header { font-size: 14px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-                .keyboard-hint-keys { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
-                .keyboard-key-item { display: flex; align-items: center; gap: 4px; }
-                .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 40px; text-align: center; }
-                .keyboard-key-label { font-size: 11px; opacity: 0.9; }
-                </style>
-                """, unsafe_allow_html=True)
-
-                if st.session_state.keyboard_control and st.session_state.quiz_active:
-                    st.markdown("""
-                    <div class="keyboard-hint-compact">
-                        <div class="keyboard-hint-header"><span>🎮 键盘控制已启用</span></div>
-                        <div class="keyboard-hint-keys">
-                            <div class="keyboard-key-item"><span class="keyboard-key-badge">1-6</span><span class="keyboard-key-label">选择选项</span></div>
-                            <div class="keyboard-key-item"><span class="keyboard-key-badge">Enter</span><span class="keyboard-key-label">提交答案</span></div>
-                            <div class="keyboard-key-item"><span class="keyboard-key-badge">← →</span><span class="keyboard-key-label">切换题目</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
 
             st.divider()
 
@@ -510,9 +511,13 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                             option_values.append(chr(65 + i))
 
                 if st.session_state.shuffle_mode and q_type == '单选题':
+                    # 稳定打乱：基于题目索引做种子，同一题每次渲染顺序一致
+                    rng = random.Random(st.session_state.current_index * 31 + hash(row['题目']) % 10007)
                     combined = list(zip(opts, option_values))
-                    random.shuffle(combined)
+                    rng.shuffle(combined)
                     opts, option_values = zip(*combined) if combined else ([], [])
+                    # 存储打乱后的选项字母顺序，供键盘回调使用
+                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = list(option_values)
 
                 val = st.radio("请选择答案:", opts,
                                key=f"q_{st.session_state.current_index}",
@@ -533,7 +538,10 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
                         options.append((chr(65 + i), val))
 
                 if st.session_state.shuffle_mode:
-                    random.shuffle(options)
+                    rng = random.Random(st.session_state.current_index * 31 + hash(row['题目']) % 10007)
+                    rng.shuffle(options)
+                    # 存储打乱后的选项字母顺序，供键盘回调使用
+                    st.session_state[f'_shuffle_{st.session_state.current_index}'] = [o[0] for o in options]
 
                 for opt_key, opt_val in options:
                     if st.checkbox(f"{opt_key}. {opt_val}",
@@ -552,8 +560,18 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # 幻影按钮区域（键盘控制用）
+            # 幻影按钮区域（键盘控制用）— 立即注入隐藏样式防止闪烁
             if st.session_state.get('keyboard_control', False) and st.session_state.get('quiz_active', False):
+                st.markdown("""
+                <style>
+                button[kind="secondaryFormSubmit"]:has-text(":::") {
+                    display: none !important; visibility: hidden !important; opacity: 0 !important;
+                    position: absolute !important; left: -9999px !important;
+                    width: 1px !important; height: 1px !important; overflow: hidden !important;
+                    pointer-events: none !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 with st.container():
                     for i in range(6):
                         st.button(
