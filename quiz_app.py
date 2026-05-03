@@ -14,11 +14,11 @@ from database import (
     save_study_stats_with_consistent_time, delete_wrong_question,
     get_all_question_banks, get_all_study_progress
 )
-from utils import format_time, truncate_filename
+from utils import format_time, truncate_filename, question_type_css
 from quiz_engine import (
     start_quiz, submit_answer_action, restore_original_data,
     get_current_question_and_total, check_timeout_logic,
-    render_js_timer, start_question_timer
+    render_js_timer, start_question_timer, get_total_questions
 )
 from keyboard import (
     phantom_option_callback, phantom_enter_callback,
@@ -72,6 +72,16 @@ div[data-testid="stDataFrameResizable"] { width: 100% !important; }
 
 input[type="number"] { cursor: ns-resize; }
 
+/* 题型色彩系统 */
+.qtype-single { border-left: 4px solid #2196F3 !important; }
+.qtype-multi  { border-left: 4px solid #9C27B0 !important; }
+.qtype-judge  { border-left: 4px solid #FF9800 !important; }
+.qtype-fill   { border-left: 4px solid #009688 !important; }
+.qtype-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: bold; color: white; margin-left: 8px;
+}
+
 /* 隐藏幻影按钮 */
 button[kind="secondaryFormSubmit"]:has-text(":::") {
     display: none !important; visibility: hidden !important; opacity: 0 !important;
@@ -112,19 +122,12 @@ def exit_confirm_dialog():
 def _save_and_exit_quiz():
     """保存进度并退出刷题"""
     if st.session_state.current_bank_id and st.session_state.practice_mode:
-        total_questions = len(st.session_state.data)
-        if st.session_state.random_mode:
-            total_questions = len(st.session_state.random_indices)
-        elif (hasattr(st.session_state, 'quiz_queue_indices')
-              and st.session_state.quiz_queue_indices):
-            total_questions = len(st.session_state.quiz_queue_indices)
-
         save_study_progress(
             bank_id=st.session_state.current_bank_id,
             practice_mode=st.session_state.practice_mode,
             current_index=st.session_state.current_index,
             question_results=st.session_state.question_results,
-            total_questions=total_questions,
+            total_questions=get_total_questions(),
             is_completed=False
         )
         st.success("进度已保存")
@@ -138,93 +141,125 @@ def _save_and_exit_quiz():
 # 侧边栏导航
 # ============================================================
 with st.sidebar:
-    st.markdown("## 🎯 功能导航")
-    st.divider()
-
-    page_options = {
-        'dashboard': '🏠 仪表盘',
-        'import': '📂 导入题库',
-        'banks': '📚 题库管理',
-        'practice': '📖 开始刷题',
-        'progress': '📋 学习进度',
-        'wrong_book': '📕 错题本',
-        'stats': '📈 学习统计'
-    }
-
-    current_page = st.radio(
-        "选择功能",
-        options=list(page_options.keys()),
-        format_func=lambda x: page_options[x],
-        index=list(page_options.keys()).index(st.session_state.current_page)
-    )
-
-    if current_page != st.session_state.current_page:
-        if st.session_state.quiz_active and st.session_state.quiz_completed:
-            if st.session_state.current_bank_id and st.session_state.practice_mode:
-                total_questions = len(st.session_state.data) if st.session_state.random_mode else len(
-                    st.session_state.random_indices) if st.session_state.random_indices else len(
-                    st.session_state.data)
-                save_study_progress(
-                    bank_id=st.session_state.current_bank_id,
-                    practice_mode=st.session_state.practice_mode,
-                    current_index=st.session_state.current_index,
-                    question_results=st.session_state.question_results,
-                    total_questions=total_questions,
-                    is_completed=st.session_state.quiz_completed
-                )
-
-            st.session_state.quiz_active = False
-            st.session_state.quiz_completed = False
-            st.session_state.force_exit_results = True
-            if 'final_quiz_time' in st.session_state:
-                del st.session_state.final_quiz_time
-
-        st.session_state.current_page = current_page
-        st.rerun()
-
-    st.divider()
-
-    st.markdown("### 📊 系统状态")
-
-    if st.session_state.current_bank_name:
-        bank_name = st.session_state.current_bank_name
-        display_name = truncate_filename(bank_name, 15)
-        st.metric("当前题库", display_name)
-        if st.session_state.data is not None:
-            st.caption(f"{len(st.session_state.data)}题")
-
-    banks = get_all_question_banks()
-    if banks:
-        st.caption(f"共{len(banks)}个题库")
-
-    progress_list = get_all_study_progress()
-    if progress_list:
-        st.metric("未完成进度", f"{len(progress_list)}个")
-
-    st.divider()
-
-    st.markdown("### ⚡ 快捷操作")
-
-    if st.button("🔄 刷新页面", use_container_width=True):
-        st.rerun()
-
+    # ================================================================
+    # 答题模式 — 精简侧边栏
+    # ================================================================
     if st.session_state.quiz_active and not st.session_state.quiz_completed:
+        st.markdown("## 🎯 正在答题")
+
+        if st.session_state.current_bank_name:
+            st.caption(f"题库: {truncate_filename(st.session_state.current_bank_name, 15)}")
+
+        row, total_q = get_current_question_and_total()
+        if row and total_q:
+            progress_pct = (st.session_state.current_index + 1) / total_q
+            st.progress(progress_pct, text=f"进度 {st.session_state.current_index + 1}/{total_q}")
+            if '题型' in row:
+                st.caption(f"当前题型: {row['题型']}")
+
+        st.divider()
+
         if st.button("🏠 退出刷题", use_container_width=True, type="secondary"):
             if st.session_state.current_bank_id and st.session_state.practice_mode:
-                total_questions = len(st.session_state.data) if st.session_state.random_mode else len(
-                    st.session_state.random_indices) if st.session_state.random_indices else len(
-                    st.session_state.data)
                 save_study_progress(
                     bank_id=st.session_state.current_bank_id,
                     practice_mode=st.session_state.practice_mode,
                     current_index=st.session_state.current_index,
                     question_results=st.session_state.question_results,
-                    total_questions=total_questions
+                    total_questions=get_total_questions()
                 )
                 st.success("进度已自动保存")
 
             st.session_state.quiz_active = False
             st.session_state.sidebar_collapsed = False
+            st.rerun()
+
+    # ================================================================
+    # 非答题模式 — 完整侧边栏
+    # ================================================================
+    else:
+        st.markdown("## 🎯 功能导航")
+        st.divider()
+
+        page_options = {
+            'dashboard': '🏠 仪表盘',
+            'import': '📂 导入题库',
+            'banks': '📚 题库管理',
+            'practice': '📖 开始刷题',
+            'progress': '📋 学习进度',
+            'wrong_book': '📕 错题本',
+            'stats': '📈 学习统计'
+        }
+
+        current_page = st.radio(
+            "选择功能",
+            options=list(page_options.keys()),
+            format_func=lambda x: page_options[x],
+            index=list(page_options.keys()).index(st.session_state.current_page)
+        )
+
+        if current_page != st.session_state.current_page:
+            if st.session_state.quiz_active and st.session_state.quiz_completed:
+                if st.session_state.current_bank_id and st.session_state.practice_mode:
+                    save_study_progress(
+                        bank_id=st.session_state.current_bank_id,
+                        practice_mode=st.session_state.practice_mode,
+                        current_index=st.session_state.current_index,
+                        question_results=st.session_state.question_results,
+                        total_questions=get_total_questions(),
+                        is_completed=st.session_state.quiz_completed
+                    )
+
+                st.session_state.quiz_active = False
+                st.session_state.quiz_completed = False
+                st.session_state.force_exit_results = True
+                if 'final_quiz_time' in st.session_state:
+                    del st.session_state.final_quiz_time
+
+            st.session_state.current_page = current_page
+            st.rerun()
+
+        st.divider()
+
+        st.markdown("### 📊 系统状态")
+
+        if st.session_state.current_bank_name:
+            bank_name = st.session_state.current_bank_name
+            display_name = truncate_filename(bank_name, 15)
+            st.metric("当前题库", display_name)
+            if st.session_state.data is not None:
+                st.caption(f"{len(st.session_state.data)}题")
+
+        banks = get_all_question_banks()
+        if banks:
+            st.caption(f"共{len(banks)}个题库")
+
+        progress_list = get_all_study_progress()
+        if progress_list:
+            st.metric("未完成进度", f"{len(progress_list)}个")
+
+        # 题型分布（侧边栏精简显示）
+        if st.session_state.data is not None and '题型' in st.session_state.data.columns:
+            type_counts = st.session_state.data['题型'].value_counts()
+            if len(type_counts) > 0:
+                type_colors = {'单选题': '#2196F3', '多选题': '#9C27B0', '判断题': '#FF9800', '填空题': '#009688'}
+                total = type_counts.sum()
+                for qtype, count in type_counts.items():
+                    pct = count / total
+                    color = type_colors.get(qtype, '#757575')
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;margin:4px 0;font-size:13px">'
+                        f'<span style="width:12px;height:12px;border-radius:3px;background:{color};margin-right:8px"></span>'
+                        f'{qtype} {count}题'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+
+        st.divider()
+
+        st.markdown("### ⚡ 快捷操作")
+
+        if st.button("🔄 刷新页面", use_container_width=True):
             st.rerun()
 
 # ============================================================
@@ -276,19 +311,45 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             save_study_stats_with_consistent_time(total_count, correct_count)
 
             if st.session_state.current_bank_id and st.session_state.practice_mode:
-                total_q = len(st.session_state.data) if st.session_state.random_mode else len(
-                    st.session_state.random_indices) if st.session_state.random_indices else len(
-                    st.session_state.data)
                 save_study_progress(
                     bank_id=st.session_state.current_bank_id,
                     practice_mode=st.session_state.practice_mode,
                     current_index=st.session_state.current_index,
                     question_results=st.session_state.question_results,
-                    total_questions=total_q,
+                    total_questions=get_total_questions(),
                     is_completed=True
                 )
 
             formatted_time = format_time(total_time)
+
+            # 可视化：环形图 + 用时柱状图
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                try:
+                    import plotly.graph_objects as go
+                    fig = go.Figure(data=[go.Pie(
+                        labels=['正确', '错误'],
+                        values=[correct_count, total_count - correct_count],
+                        hole=0.6,
+                        marker_colors=['#4CAF50', '#f44336'],
+                        textinfo='none'
+                    )])
+                    fig.update_layout(
+                        title=f'正确率 {score}%', title_x=0.5, title_font_size=16,
+                        height=280, margin=dict(t=40, b=10, l=10, r=10),
+                        showlegend=True, legend=dict(orientation='h', y=-0.1)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                except ImportError:
+                    st.metric("正确率", f"{score}%")
+
+            with col_chart2:
+                if results:
+                    time_data = pd.DataFrame([
+                        {'题号': i + 1, '用时(秒)': r['time']}
+                        for i, r in enumerate(results)
+                    ])
+                    st.bar_chart(time_data.set_index('题号'), use_container_width=True)
 
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("总题数", total_count)
@@ -375,7 +436,7 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
             st.rerun()
 
         with st.container():
-            st.markdown('<div class="question-card">', unsafe_allow_html=True)
+            st.markdown(f'<div class="question-card qtype-{question_type_css(row)}">', unsafe_allow_html=True)
 
             col_info1, col_info2, col_timer = st.columns([6, 2, 2])
             with col_info1:
@@ -392,7 +453,12 @@ if st.session_state.quiz_active and not st.session_state.force_exit_results:
 
             with col_info2:
                 st.metric("进度", f"{st.session_state.current_index + 1}/{total_q}")
-                st.caption(f"题型: {row['题型']}")
+                type_key = question_type_css(row)
+                type_colors = {'single': '#2196F3', 'multi': '#9C27B0', 'judge': '#FF9800', 'fill': '#009688'}
+                st.markdown(
+                    f'<span class="qtype-badge" style="background:{type_colors.get(type_key, "#2196F3")}">{row["题型"]}</span>',
+                    unsafe_allow_html=True
+                )
 
             with col_timer:
                 if not st.session_state.show_result:

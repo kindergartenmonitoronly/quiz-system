@@ -391,19 +391,12 @@ def submit_answer_action(row):
         add_to_wrong_book(row, st.session_state.current_file_name)
 
     if st.session_state.current_bank_id and st.session_state.practice_mode:
-        if st.session_state.random_mode:
-            total_q = len(st.session_state.random_indices)
-        elif hasattr(st.session_state, 'quiz_queue_indices') and st.session_state.quiz_queue_indices:
-            total_q = len(st.session_state.quiz_queue_indices)
-        else:
-            total_q = len(st.session_state.data)
-
         save_study_progress(
             bank_id=st.session_state.current_bank_id,
             practice_mode=st.session_state.practice_mode,
             current_index=st.session_state.current_index,
             question_results=st.session_state.question_results,
-            total_questions=total_q
+            total_questions=get_total_questions()
         )
 
 
@@ -415,3 +408,15 @@ def restore_original_data():
 
     if hasattr(st.session_state, 'quiz_queue_indices'):
         del st.session_state.quiz_queue_indices
+
+
+def get_total_questions():
+    """统一获取当前刷题的总题目数"""
+    if st.session_state.random_mode and st.session_state.random_indices:
+        return len(st.session_state.random_indices)
+    if (hasattr(st.session_state, 'quiz_queue_indices')
+            and st.session_state.quiz_queue_indices):
+        return len(st.session_state.quiz_queue_indices)
+    if st.session_state.data is not None:
+        return len(st.session_state.data)
+    return 0

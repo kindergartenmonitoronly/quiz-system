@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 
 from quiz_engine import (
     get_current_question_and_total, submit_answer_action,
-    start_question_timer, is_question_answered
+    start_question_timer, is_question_answered, get_total_questions
 )
 
 
@@ -130,12 +130,7 @@ def phantom_next_callback():
     if not st.session_state.get('quiz_active', False):
         return
 
-    if st.session_state.random_mode:
-        total_q = len(st.session_state.random_indices)
-    elif hasattr(st.session_state, 'quiz_queue_indices') and st.session_state.quiz_queue_indices:
-        total_q = len(st.session_state.quiz_queue_indices)
-    else:
-        total_q = len(st.session_state.data)
+    total_q = get_total_questions()
 
     if st.session_state.current_index >= total_q - 1:
         return
@@ -223,81 +218,6 @@ def show_keyboard_error_feedback(message):
 # ============================================================
 # 滚轮支持
 # ============================================================
-
-def add_enhanced_wheel_support():
-    """增强的鼠标滚轮支持"""
-    js_code = """
-    <script>
-    (function() {
-        const setupEnhancedWheelSupport = () => {
-            const doc = window.parent.document;
-            let isProcessing = false;
-
-            const handleWheel = (e) => {
-                if (isProcessing) return;
-
-                const input = e.target;
-                if (input.type !== 'number') return;
-
-                const container = input.closest('[data-testid="stNumberInput"]');
-                if (!container) return;
-
-                if (!container.querySelector('input[data-testid*="stNumberInput"]')) {
-                    return;
-                }
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                isProcessing = true;
-
-                const step = parseInt(input.step) || 1;
-                const max = parseInt(input.max) || 100;
-                const min = parseInt(input.min) || 1;
-                const currentValue = parseInt(input.value) || min;
-
-                const delta = Math.sign(e.deltaY) * -1;
-
-                let newValue = currentValue + (delta * step);
-                newValue = Math.max(min, Math.min(max, newValue));
-
-                if (newValue !== currentValue) {
-                    input.value = newValue;
-
-                    const event = new Event('change', { bubbles: true });
-                    input.dispatchEvent(event);
-
-                    input.style.boxShadow = '0 0 0 2px #4CAF50';
-                    setTimeout(() => {
-                        input.style.boxShadow = '';
-                    }, 200);
-                }
-
-                setTimeout(() => {
-                    isProcessing = false;
-                }, 50);
-            };
-
-            const inputs = doc.querySelectorAll('input[type="number"]');
-            inputs.forEach(input => {
-                input.removeEventListener('wheel', handleWheel);
-                input.addEventListener('wheel', handleWheel, { passive: false });
-            });
-        };
-
-        setTimeout(setupEnhancedWheelSupport, 1000);
-
-        const observer = new MutationObserver(() => {
-            setTimeout(setupEnhancedWheelSupport, 500);
-        });
-
-        const doc = window.parent.document;
-        observer.observe(doc.body, { childList: true, subtree: true });
-    })();
-    </script>
-    """
-    components.html(js_code, height=0)
-
 
 def render_keyboard_controls():
     """渲染键盘控制JS代码 - 幻影按钮方案"""
@@ -547,20 +467,4 @@ def render_keyboard_controls():
         </script>
         """,
         height=0,
-    )
-
-
-def cleanup_keyboard_controls():
-    """清理键盘控制"""
-    components.html(
-        """
-        <script>
-        if (window.__cleanupPhantomKeyboard) {
-            window.__cleanupPhantomKeyboard();
-        }
-        const doc = window.parent.document;
-        doc.removeEventListener('keydown', handleKeydown);
-        </script>
-        """,
-        height=0
     )

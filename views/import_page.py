@@ -1,5 +1,6 @@
 """导入题库页面（三步流程）"""
 import re
+import time
 import streamlit as st
 import pandas as pd
 
@@ -13,6 +14,25 @@ from utils import (
 def render_import_page():
     """渲染导入题库页面"""
     st.header("📂 导入题库")
+
+    steps = {'upload': ('📤 上传文件', 1), 'mapping': ('🔧 配置映射', 2), 'confirm': ('✅ 确认导入', 3)}
+    current_step_name, current_step_num = steps.get(st.session_state.import_step, ('上传文件', 1))
+
+    # 步骤进度条
+    st.progress(current_step_num / 3, text=f"步骤 {current_step_num}/3: {current_step_name}")
+    cols = st.columns(3)
+    for i, (label, num) in enumerate([
+        ('📤 上传', 1), ('🔧 映射', 2), ('✅ 确认', 3)
+    ]):
+        with cols[i]:
+            if num < current_step_num:
+                st.success(label)
+            elif num == current_step_num:
+                st.info(f"**{label}** ←")
+            else:
+                st.caption(label)
+
+    st.divider()
 
     if st.session_state.import_step == 'upload':
         render_upload_step()
@@ -431,8 +451,7 @@ def render_confirm_step():
                 st.session_state.current_bank_file = file_name
                 st.session_state.current_bank_id = bank_id
                 st.success(f"✅ 题库已保存: {bank_name} ({total_questions}题)")
-                time_import = __import__('time')
-                time_import.sleep(1)
+                time.sleep(1)
                 st.session_state.current_page = 'banks'
                 st.rerun()
             else:

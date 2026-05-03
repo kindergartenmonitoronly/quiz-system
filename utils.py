@@ -516,6 +516,12 @@ def truncate_filename(filename, max_length=25):
         return filename[:max_length - 3] + '...'
 
 
+def question_type_css(row):
+    """根据题型返回对应的 CSS class"""
+    type_map = {'单选题': 'single', '多选题': 'multi', '判断题': 'judge', '填空题': 'fill'}
+    return type_map.get(row.get('题型', '单选题'), 'single')
+
+
 def add_wheel_support():
     """全局鼠标滚轮支持：在所有数字输入框上滚动即模拟点击 +/- 按钮，触发 on_change 同步滑块"""
     components.html("""

@@ -2,19 +2,51 @@
 import streamlit as st
 import pandas as pd
 import time
-import streamlit.components.v1 as components
 
 from database import (
     get_all_question_banks, get_active_question_bank, load_questions_from_bank,
-    activate_question_bank, get_wrong_book_files, get_wrong_questions
+    activate_question_bank, get_wrong_book_files, get_wrong_questions,
+    get_all_study_progress
 )
 from quiz_engine import start_quiz
 from utils import truncate_filename, add_wheel_support
 
 
+def _render_back_to_bank_button(reset_all=False):
+    """统一的返回原题库按钮 + 恢复逻辑"""
+    col_back, col_info = st.columns([1, 3])
+    with col_back:
+        if st.button("🔙 返回原题库", type="secondary", use_container_width=True):
+            original_bank = st.session_state.original_bank_before_review
+            active_bank = get_active_question_bank()
+
+            need_activate = not active_bank or original_bank['id'] != active_bank['id']
+            if need_activate:
+                activate_question_bank(original_bank['id'])
+
+            df = load_questions_from_bank(original_bank['id'])
+            if not df.empty:
+                st.session_state.data = df
+                st.session_state.current_file_name = original_bank['file']
+                st.session_state.current_bank_name = original_bank['name']
+                st.session_state.current_bank_file = original_bank['file']
+                st.session_state.current_bank_id = original_bank['id']
+                st.session_state.review_mode = False
+                if reset_all:
+                    st.session_state.practice_mode = None
+                    st.session_state.original_bank_before_review = None
+                if need_activate:
+                    st.success(f"已切换回原题库: {original_bank['name']}")
+                    time.sleep(1)
+                st.rerun()
+
+    with col_info:
+        st.caption(f"当前为错题本练习模式，原题库: {st.session_state.original_bank_before_review['name']}")
+
+
 def render_practice_page():
     """渲染刷题页面"""
-    progress_list = __import__('database', fromlist=['get_all_study_progress']).get_all_study_progress()
+    progress_list = get_all_study_progress()
     has_progress = len(progress_list) > 0
 
     if has_progress and not st.session_state.continue_progress:
@@ -81,81 +113,11 @@ def render_practice_page():
         display_file = truncate_filename(st.session_state.current_file_name, 40)
         st.caption(f"文件: {display_file}")
 
-    # 错题重练模式返回按钮
-    if (hasattr(st.session_state, 'practice_mode') and
-            st.session_state.practice_mode == 'review' and
-            st.session_state.original_bank_before_review and
-            not st.session_state.quiz_active):
-        col_back, col_info = st.columns([1, 3])
-        with col_back:
-            if st.button("🔙 返回原题库", type="secondary", use_container_width=True):
-                original_bank = st.session_state.original_bank_before_review
-                active_bank = get_active_question_bank()
-
-                if not active_bank or original_bank['id'] != active_bank['id']:
-                    if activate_question_bank(original_bank['id']):
-                        df = load_questions_from_bank(original_bank['id'])
-                        if not df.empty:
-                            st.session_state.data = df
-                            st.session_state.current_file_name = original_bank['file']
-                            st.session_state.current_bank_name = original_bank['name']
-                            st.session_state.current_bank_file = original_bank['file']
-                            st.session_state.current_bank_id = original_bank['id']
-                            st.session_state.review_mode = False
-                            st.session_state.practice_mode = None
-                            st.session_state.original_bank_before_review = None
-                            st.success(f"已切换回原题库: {original_bank['name']}")
-                            time.sleep(1)
-                            st.rerun()
-                else:
-                    df = load_questions_from_bank(original_bank['id'])
-                    if not df.empty:
-                        st.session_state.data = df
-                        st.session_state.current_file_name = original_bank['file']
-                        st.session_state.current_bank_name = original_bank['name']
-                        st.session_state.current_bank_file = original_bank['file']
-                        st.session_state.current_bank_id = original_bank['id']
-                        st.session_state.review_mode = False
-                        st.session_state.practice_mode = None
-                        st.session_state.original_bank_before_review = None
-                        st.rerun()
-
-        with col_info:
-            st.caption(f"当前为错题本练习模式，原题库: {st.session_state.original_bank_before_review['name']}")
-
-    elif st.session_state.review_mode and st.session_state.original_bank_before_review:
-        col_back, col_info = st.columns([1, 3])
-        with col_back:
-            if st.button("🔙 返回原题库", type="secondary", use_container_width=True):
-                original_bank = st.session_state.original_bank_before_review
-                active_bank = get_active_question_bank()
-
-                if original_bank['id'] != active_bank['id']:
-                    if activate_question_bank(original_bank['id']):
-                        df = load_questions_from_bank(original_bank['id'])
-                        if not df.empty:
-                            st.session_state.data = df
-                            st.session_state.current_file_name = original_bank['file']
-                            st.session_state.current_bank_name = original_bank['name']
-                            st.session_state.current_bank_file = original_bank['file']
-                            st.session_state.current_bank_id = original_bank['id']
-                            st.session_state.review_mode = False
-                            st.success(f"已切换回原题库: {original_bank['name']}")
-                            time.sleep(1)
-                            st.rerun()
-                else:
-                    df = load_questions_from_bank(original_bank['id'])
-                    if not df.empty:
-                        st.session_state.data = df
-                        st.session_state.current_file_name = original_bank['file']
-                        st.session_state.current_bank_name = original_bank['name']
-                        st.session_state.current_bank_file = original_bank['file']
-                        st.session_state.current_bank_id = original_bank['id']
-                        st.session_state.review_mode = False
-                        st.rerun()
-
-        with col_info:
-            st.caption(f"当前为错题本练习模式，原题库: {st.session_state.original_bank_before_review['name']}")
+    # 错题重练模式返回按钮（统一逻辑）
+    if st.session_state.review_mode and st.session_state.original_bank_before_review:
+        _render_back_to_bank_button(
+            reset_all=(st.session_state.practice_mode == 'review' and not st.session_state.quiz_active)
+        )
 
     st.subheader("1. 选择刷题模式")
     mode_col1, mode_col2, mode_col3 = st.columns(3)
@@ -235,6 +197,9 @@ def render_practice_settings():
 
     st.subheader(mode_titles.get(st.session_state.practice_mode, '刷题设置'))
 
+    # 错题数据一次性加载，避免同页多次 DB 查询
+    _cached_wrong_list = get_wrong_questions() if st.session_state.practice_mode == 'review' else []
+
     if st.session_state.practice_mode == 'review':
         wrong_files = get_wrong_book_files()
 
@@ -275,7 +240,7 @@ def render_practice_settings():
     st.subheader("2. 题目数量设置")
 
     if st.session_state.practice_mode == 'review':
-        wrong_list = get_wrong_questions()
+        wrong_list = _cached_wrong_list
         filtered_wrong_list = []
         for wrong in wrong_list:
             q_type = wrong.get('题型', '')
@@ -382,7 +347,7 @@ def render_practice_settings():
     with col_start:
         disabled = False
         if st.session_state.practice_mode == 'review':
-            wrong_list = get_wrong_questions()
+            wrong_list = _cached_wrong_list
             filtered_count = 0
             for wrong in wrong_list:
                 q_type = wrong.get('题型', '')
