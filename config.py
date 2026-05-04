@@ -106,6 +106,8 @@ def init_session_state():
         'original_data_backup': None,
         # 庆祝状态
         'celebration_shown': False,
+        # 深色模式
+        'dark_mode': False,
     }
 
     for key, value in defaults.items():

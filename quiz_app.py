@@ -81,12 +81,6 @@ input[type="number"] { cursor: ns-resize; }
 .keyboard-key-label { font-size: 11px; opacity: 0.9; }
 .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
 
-/* 深色模式 */
-@media (prefers-color-scheme: dark) {
-    .question-card { background: #1e1e1e !important; color: #e0e0e0 !important; box-shadow: 0 2px 8px rgba(255,255,255,0.05) !important; }
-    .stButton > button { background: #333; color: #e0e0e0; border-color: #555; }
-    .stButton > button:hover { background: #444; }
-}
 
 /* 题型色彩系统 */
 .qtype-single { border-left: 4px solid #2196F3 !important; }
@@ -107,6 +101,24 @@ button[kind="secondaryFormSubmit"]:has-text(":::") {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# 深色模式 CSS（手动切换）
+if st.session_state.get('dark_mode', False):
+    st.markdown("""
+    <style>
+    .stApp { background: #1a1a2e; }
+    .main-header { border-bottom-color: #555; }
+    .question-card { background: #16213e !important; color: #e0e0e0 !important; box-shadow: 0 2px 8px rgba(255,255,255,0.05) !important; }
+    .stButton > button { background: #333; color: #e0e0e0; border-color: #555; }
+    .stButton > button:hover { background: #444; }
+    div[data-testid="stMetric"] label, div[data-testid="stCaptionContainer"] { color: #aaa !important; }
+    div[data-testid="stMetricValue"] { color: #e0e0e0 !important; }
+    div[data-testid="stDataFrame"] { background: #1e1e1e; }
+    section[data-testid="stSidebar"] { background: #111; }
+    section[data-testid="stSidebar"] * { color: #ccc !important; }
+    .keyboard-hint-compact { border-color: rgba(255,255,255,0.1) !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ============================================================
 # 退出确认弹窗
@@ -310,6 +322,11 @@ with st.sidebar:
         st.divider()
 
         st.markdown("### ⚡ 快捷操作")
+
+        dark = st.session_state.get('dark_mode', False)
+        if st.button(("☀️ 浅色模式" if dark else "🌙 深色模式"), use_container_width=True):
+            st.session_state.dark_mode = not dark
+            st.rerun()
 
         if st.button("🔄 刷新页面", use_container_width=True):
             st.rerun()
