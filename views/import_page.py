@@ -284,8 +284,6 @@ def render_mapping_step():
                 </div>
                 """, unsafe_allow_html=True)
 
-        st.session_state.shuffle_mode = st.checkbox("随机打乱选项顺序", value=False, help="每次显示题目时随机打乱选项顺序")
-
         st.markdown("**🔠 选项列映射**")
         opt_count = st.session_state.option_columns_count
 
@@ -416,33 +414,56 @@ def render_confirm_step():
 
     if st.session_state.type_analysis:
         analysis = st.session_state.type_analysis
+        issues = analysis.get('potential_issues', [])
 
-        if analysis.get('potential_issues'):
-            st.warning(f"⚠️ 发现 {len(analysis['potential_issues'])} 个潜在问题")
-            with st.expander("查看问题详情"):
-                for issue in analysis['potential_issues']:
-                    st.write(issue)
+        if issues:
+            st.warning(f"⚠️ 发现 {len(issues)} 道可疑题目（题型可能识别错误）")
 
-    # 可编辑题库表格
-    st.subheader("✏️ 编辑题库（修正可疑题目）")
-    with st.expander("点击展开编辑表格", expanded=False):
-        edited_df = st.data_editor(
-            df,
-            use_container_width=True,
-            num_rows="dynamic",
-            column_config={
-                '题号': st.column_config.NumberColumn('题号', width='small'),
-                '题型': st.column_config.SelectboxColumn('题型', options=['单选题', '多选题', '判断题', '填空题'], width='small'),
-                '题目': st.column_config.TextColumn('题目', width='large'),
-                '答案': st.column_config.TextColumn('答案', width='small'),
-                '解析': st.column_config.TextColumn('解析', width='medium'),
-            },
-            hide_index=True
-        )
-        if st.button("💾 应用修改", type="secondary"):
-            st.session_state.data = edited_df
-            st.success("修改已应用")
-            st.rerun()
+            # 从完整数据中提取可疑题目行号
+            issue_indices = []
+            for issue in issues:
+                match = re.search(r'第(\d+)行', issue)
+                if match:
+                    issue_indices.append(int(match.group(1)) - 1)
+
+            st.subheader("✏️ 修正可疑题目")
+            view_mode = st.radio("显示范围", ["仅可疑题目", "全部题目"], horizontal=True, key="edit_view_mode")
+
+            if view_mode == "仅可疑题目" and issue_indices:
+                edit_df = df.iloc[issue_indices].copy()
+                st.caption(f"显示 {len(issue_indices)} 道可疑题目（共 {len(df)} 题）")
+
+                for i, issue in enumerate(issues[:5]):
+                    st.caption(f"• {issue.split(chr(10))[0]}")
+                if len(issues) > 5:
+                    st.caption(f"… 还有 {len(issues) - 5} 个问题")
+            else:
+                edit_df = df
+
+            edited_df = st.data_editor(
+                edit_df,
+                use_container_width=True,
+                num_rows="dynamic",
+                column_config={
+                    '题号': st.column_config.NumberColumn('题号', width='small'),
+                    '题型': st.column_config.SelectboxColumn('题型', options=['单选题', '多选题', '判断题', '填空题'], width='small'),
+                    '题目': st.column_config.TextColumn('题目', width='large'),
+                    '答案': st.column_config.TextColumn('答案', width='small'),
+                    '解析': st.column_config.TextColumn('解析', width='medium'),
+                },
+                hide_index=True,
+                key="suspicious_editor"
+            )
+            if st.button("💾 应用修改", type="secondary"):
+                if view_mode == "仅可疑题目":
+                    df.iloc[issue_indices] = edited_df.values
+                else:
+                    df = edited_df
+                st.session_state.data = df
+                st.success("修改已应用")
+                st.rerun()
+        else:
+            st.success("✅ 未发现可疑题目，题型识别正常")
 
     if '题型' in df.columns:
         type_counts = df['题型'].value_counts()
