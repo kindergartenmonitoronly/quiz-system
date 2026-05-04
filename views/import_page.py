@@ -1,7 +1,9 @@
 """导入题库页面（三步流程）"""
 import re
 import time
+import base64 as _b64
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from ui_components import render_preview_table
@@ -126,30 +128,55 @@ def render_upload_step():
             st.error(f"读取失败: {str(e)}")
     else:
         # AI 转换提示 + 一键复制跳转豆包
-        ai_prompt = """请将以下内容转换为标准题库格式（CSV），要求：
-- 列顺序：题号,题型,题目,答案,选项A,选项B,选项C,选项D,选项E,选项F,解析
-- 题型必须是：单选题、多选题、判断题、填空题 之一
-- 数学/化学公式使用 LaTeX 语法，包裹在 $...$（行内）或 $$...$$（块级）中
-- 判断题答案用 A（正确）或 B（错误）
-- 多选题答案用连续字母如 ABC
-- 直接输出 CSV 内容，不要额外解释"""
+        ai_prompt = """【核心指令：将指定word格式的C++题库无错转化为标准Excel格式，100%还原内容、0格式偏差、0信息错位，满足刷题/导入系统使用需求】
+
+格式标准（固定表头，按顺序排列）：表头字段：题号（独立列）、题型、题目、答案、选项A、选项B、选项C、选项D、选项E（可选）、选项F（可选）、解析
+
+核心转换规则（重点针对C++代码片段识别）：
+1. 题号要求：纯数字连续排序（1/2/3…），无跳号、无重号，从第1题开始依次编号。
+2. 题型要求：单独列标注，严格按原题型分类，统一表述为"单选题""多选题""判断题""填空题"（无其他冗余表述）。
+3. 题目要求：仅保留题干内容，删除原题号前缀（如"1.""（1）"）；题干中包含的C++代码片段（如类定义、函数、语句、{}、;、cout/endl、变量定义、运算符等）需1:1完整保留，视为题干的一部分，不得拆分/归为选项/答案；代码片段保留原始语法结构；代码的语法结构、符号（如::、->、*、&、[]、()、{}）、关键字（如class、virtual、template）、标点、换行需与原文完全一致。
+4. 选项要求：选项A-D（E/F无则留空）中包含的C++代码片段需完整保留，视为选项内容，不得归为答案；选项内容需严格按原文顺序填充，代码格式（如缩进、分号、括号）不做任何修改。
+5. 答案要求：单选题答案仅允许为纯单字母（A/B/C/D），严禁将任何代码片段、文字、符号填入答案列；多选题答案仅允许为无分隔符的组合字母（如ABC/ABD）；判断题答案仅允许为A（正确）/B（错误）；填空题答案仅允许为题干空缺对应的内容（多空用"；"分隔）。
+6. 空值处理：无对应选项（如仅A-D无E/F）、无解析时，对应列直接留空，不填"无"等额外字符。
+7. 代码识别强制规则：任何包含C++语法特征的内容（如class/struct定义、函数体{}、分号;、cout/cerr、变量类型（int/char/string）、指针*、引用&、运算符重载、模板template、STL容器（vector/map/list）等），均判定为"题目/选项的内容"，不得归入"答案"列；答案列仅提取原题标注的最终答案（如"A""B"），不得将代码中的字母、符号误判为答案。
+
+内容还原要求：
+1. 题型全覆盖：提取所有题型（单选、多选、判断、填空等），无增删、无篡改、无错别字；
+2. 专业信息精准：C++代码、公式、术语、数字、符号1:1复刻原文；
+3. 对应关系无偏差："题号-题型-题目-选项-答案-解析"严格匹配，代码片段不导致串列、错位。
+
+公式处理规则：所有数学公式、化学方程式使用 LaTeX 语法包裹在 $...$（行内）或 $$...$$（块级）中；示例：二次方程 $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$，化学方程式 $2H_2 + O_2 \\rightarrow 2H_2O$；Excel 单元格中直接保留 LaTeX 代码文本，不要渲染成图片；如果原文档中公式是图片格式无法识别，请在对应位置标注 [公式无法识别]。
+
+验收标准：
+1. 格式：Excel表头顺序、字段数量与要求一致，单元格可直接换行展示完整代码内容；
+2. 内容：所有题目无遗漏，题型分类准确，答案仅为指定格式的字母，代码片段完整保留在题干/选项列；
+3. 可用性：可直接复制粘贴到Excel，或生成.xlsx文件，支持打印、导入刷题系统/题库管理平台。
+
+交付要求：直接输出csv格式文件，按行排列，字段用【Tab键】分隔（Excel可直接识别分列），同时附转化后的核对清单（总题数+各题型题数）。"""
         col_prompt, col_btn = st.columns([3, 1])
         with col_prompt:
             with st.expander("🤖 AI 转换提示词（点击展开）", expanded=False):
                 st.code(ai_prompt, language="markdown")
         with col_btn:
-            import base64 as _b64
             prompt_b64 = _b64.b64encode(ai_prompt.encode()).decode()
             components.html(f"""
             <div style="display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:8px">
             <button onclick="
-                navigator.clipboard.writeText(atob('{prompt_b64}'));
-                window.open('https://www.doubao.com/chat/', '_blank');
+                var text = atob('{prompt_b64}');
+                navigator.clipboard.writeText(text).then(function() {{
+                    var toast = document.createElement('div');
+                    toast.innerText = '✅ 已复制！在豆包对话框按 Ctrl+V 粘贴';
+                    toast.style.cssText = 'position:fixed;top:80px;right:30px;background:#4CAF50;color:white;padding:12px 20px;border-radius:10px;z-index:99999;font-size:14px;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.2)';
+                    document.body.appendChild(toast);
+                    setTimeout(function(){{ toast.remove(); }}, 3000);
+                }});
+                setTimeout(function(){{ window.open('https://www.doubao.com/chat/', '_blank'); }}, 300);
             " style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;
             padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold;width:100%">
-            📋 复制并打开豆包
+            📋 复制提示词并打开豆包
             </button>
-            <span style="font-size:11px;color:var(--text-muted)">点击复制提示词并跳转</span>
+            <span style="font-size:11px;color:var(--text-muted)">点击后自动复制，在豆包对话框 Ctrl+V 粘贴</span>
             </div>
             """, height=90)
 
@@ -215,8 +242,12 @@ def render_mapping_step():
                 option_index = ord(max_letter) - ord('A') + 1
                 if option_index > max_option_needed:
                     max_option_needed = option_index
-    # 同时扫描文件列名中的选项列（选项A-选项F）
-    col_option_count = sum(1 for c in cols if re.match(r'选项[A-F]', c))
+    # 同时扫描文件列名中实际有内容的选项列
+    col_option_count = 0
+    for c in cols:
+        m = re.match(r'选项([A-F])', c)
+        if m and df_raw[c].dropna().astype(str).str.strip().replace('', pd.NA).dropna().shape[0] > 0:
+            col_option_count = max(col_option_count, ord(m.group(1)) - ord('A') + 1)
     max_option_needed = max(max_option_needed, col_option_count)
 
     required_options = max(2, min(6, max_option_needed))
