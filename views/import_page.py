@@ -125,6 +125,34 @@ def render_upload_step():
         except Exception as e:
             st.error(f"读取失败: {str(e)}")
     else:
+        # AI 转换提示 + 一键复制跳转豆包
+        ai_prompt = """请将以下内容转换为标准题库格式（CSV），要求：
+- 列顺序：题号,题型,题目,答案,选项A,选项B,选项C,选项D,选项E,选项F,解析
+- 题型必须是：单选题、多选题、判断题、填空题 之一
+- 数学/化学公式使用 LaTeX 语法，包裹在 $...$（行内）或 $$...$$（块级）中
+- 判断题答案用 A（正确）或 B（错误）
+- 多选题答案用连续字母如 ABC
+- 直接输出 CSV 内容，不要额外解释"""
+        col_prompt, col_btn = st.columns([3, 1])
+        with col_prompt:
+            with st.expander("🤖 AI 转换提示词（点击展开）", expanded=False):
+                st.code(ai_prompt, language="markdown")
+        with col_btn:
+            import base64 as _b64
+            prompt_b64 = _b64.b64encode(ai_prompt.encode()).decode()
+            components.html(f"""
+            <div style="display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:8px">
+            <button onclick="
+                navigator.clipboard.writeText(atob('{prompt_b64}'));
+                window.open('https://www.doubao.com/chat/', '_blank');
+            " style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;
+            padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold;width:100%">
+            📋 复制并打开豆包
+            </button>
+            <span style="font-size:11px;color:var(--text-muted)">点击复制提示词并跳转</span>
+            </div>
+            """, height=90)
+
         st.info("### 📄 数据格式示例")
         st.markdown("""
         **标准格式CSV文件结构：**
@@ -176,7 +204,7 @@ def render_mapping_step():
 
     mapping = st.session_state.column_mapping
 
-    # 分析答案列，动态确定所需选项数量
+    # 分析答案列 + 文件列名，动态确定所需选项数量
     max_option_needed = 0
     answer_column = mapping.get('答案', '')
     if answer_column and answer_column in df_raw.columns:
@@ -187,10 +215,15 @@ def render_mapping_step():
                 option_index = ord(max_letter) - ord('A') + 1
                 if option_index > max_option_needed:
                     max_option_needed = option_index
+    # 同时扫描文件列名中的选项列（选项A-选项F）
+    col_option_count = sum(1 for c in cols if re.match(r'选项[A-F]', c))
+    max_option_needed = max(max_option_needed, col_option_count)
 
-    required_options = max(2, max_option_needed)
-    if required_options != st.session_state.option_columns_count:
+    required_options = max(2, min(6, max_option_needed))
+    # 只在首次加载时自动设置，之后由用户手动调整
+    if not st.session_state.get('_option_count_set', False):
         st.session_state.option_columns_count = required_options
+        st.session_state._option_count_set = True
 
     # 基本字段映射
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -235,54 +268,33 @@ def render_mapping_step():
 
     # 高级选项
     with st.expander("⚙️ 高级选项", expanded=True):
-        st.markdown("**📊 选项列数量设置**")
-
-        col_count1, col_count2, col_count3, col_count4 = st.columns([1, 1, 1, 3])
-
-        with col_count1:
-            st.markdown("<div style='margin-top: 15px; text-align: right;'>选项列数:</div>", unsafe_allow_html=True)
-
-        with col_count2:
-            st.markdown(f"""
-            <div style='
-                margin-top: 8px; text-align: center; font-size: 20px; font-weight: bold;
-                color: #4CAF50; padding: 6px; background: #e8f5e9;
-                border-radius: 6px; border: 2px solid #4CAF50;
-            '>{st.session_state.option_columns_count}</div>
-            """, unsafe_allow_html=True)
-
-        with col_count3:
-            button_col1, button_col2 = st.columns(2)
-            with button_col1:
-                if st.button("➖", key="decrease_option_count", use_container_width=True):
-                    if st.session_state.option_columns_count > 2:
-                        st.session_state.option_columns_count -= 1
-                        st.rerun()
-            with button_col2:
-                if st.button("➕", key="increase_option_count", use_container_width=True):
-                    if st.session_state.option_columns_count < 6:
-                        st.session_state.option_columns_count += 1
-                        st.rerun()
-
-        with col_count4:
-            option_letters = ', '.join([f'选项{chr(65 + i)}' for i in range(st.session_state.option_columns_count)])
-            st.markdown(f"""
-            <div style='margin-top: 8px; padding: 8px; background: #f8f9fa;
-                border-radius: 6px; border-left: 4px solid #4CAF50; color: #333333;'>
-                <strong>将映射以下选项列：</strong><br>{option_letters}
-            </div>
-            """, unsafe_allow_html=True)
-
-            if max_option_needed > 0:
-                required_opts = [f'选项{chr(65 + i)}' for i in range(max_option_needed)]
-                st.markdown(f"""
-                <div style='margin-top: 8px; padding: 8px; background: #fff3cd;
-                    border-radius: 6px; border-left: 4px solid #ffc107; color: #856404;'>
-                    <strong>⚠️ 重要提醒：</strong><br>
-                    根据答案分析，您的题库使用了选项到{chr(65 + max_option_needed - 1)}，<br>
-                    请确保至少映射以下选项列：<br>{', '.join(required_opts)}
-                </div>
-                """, unsafe_allow_html=True)
+        opt_n = st.session_state.option_columns_count
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;
+        background:var(--bg-card);padding:12px 16px;border-radius:10px;
+        border:1px solid var(--border-default)">
+            <span style="font-weight:bold;font-size:15px">📊 选项列数量</span>
+            <span style="font-size:28px;font-weight:bold;color:#4CAF50;min-width:36px;text-align:center">{opt_n}</span>
+            <span style="color:var(--text-muted);font-size:13px">列 (2~6)</span>
+            <div style="flex:1"></div>
+        </div>
+        """, unsafe_allow_html=True)
+        col_minus, col_plus, col_info = st.columns([1, 1, 4])
+        with col_minus:
+            if st.button("➖ 减少", key="decrease_option_count", use_container_width=True,
+                         disabled=opt_n <= 2):
+                st.session_state.option_columns_count = max(2, opt_n - 1)
+                st.rerun()
+        with col_plus:
+            if st.button("➕ 增加", key="increase_option_count", use_container_width=True,
+                         disabled=opt_n >= 6):
+                st.session_state.option_columns_count = min(6, opt_n + 1)
+                st.rerun()
+        with col_info:
+            letters = [f'选项{chr(65 + i)}' for i in range(opt_n)]
+            st.caption(f"当前映射: {', '.join(letters)}")
+            if max_option_needed > opt_n:
+                st.warning(f"⚠️ 答案中检测到选项 {chr(65 + max_option_needed - 1)}，建议至少 {max_option_needed} 列")
 
         st.markdown("**🔠 选项列映射**")
         opt_count = st.session_state.option_columns_count
