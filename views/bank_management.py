@@ -31,11 +31,10 @@ def render_bank_management():
             if active_banks:
                 active_bank = active_banks[0]
                 st.markdown(f"""
-                <div style="background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-radius:10px;
-                padding:12px 16px;border-left:4px solid #4CAF50">
-                    <span style="color:#2e7d32;font-weight:bold">✅ 当前题库</span><br>
+                <div class="bank-card-header">
+                    <span style="font-weight:bold">✅ 当前题库</span><br>
                     <span style="font-size:16px">{active_bank['bank_name']}</span>
-                    <span style="color:#666;margin-left:8px">{active_bank['total_questions']}题</span>
+                    <span class="bank-card-meta" style="margin-left:8px">{active_bank['total_questions']}题</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -54,35 +53,32 @@ def render_bank_management():
 
     for bank in banks:
         is_active = bank['is_active'] == 1
-        border_color = '#4CAF50' if is_active else '#e0e0e0'
-        bg_color = '#f1f8e9' if is_active else '#fafafa'
+        card_class = "bank-card active" if is_active else "bank-card"
+        badge_class = "bank-badge active" if is_active else "bank-badge inactive"
         badge_text = '✅ 使用中' if is_active else '📂 待用'
 
-        # 构建题型标签
+        # 题型标签
         type_tags = ''
         if bank['question_types']:
             for qtype, count in bank['question_types'].items():
                 color = TYPE_COLORS.get(qtype, '#757575')
-                type_tags += f'<span style="display:inline-block;background:{color};color:white;padding:2px 8px;border-radius:10px;font-size:11px;margin:2px">{qtype} {count}</span> '
+                type_tags += f'<span class="type-tag" style="background:{color}">{qtype} {count}</span> '
 
-        # 导入日期
         import_date = ''
         if bank['import_time']:
             raw = bank['import_time']
             import_date = raw.split()[0] if isinstance(raw, str) else str(raw)[:10]
 
         st.markdown(f"""
-        <div style="background:{bg_color};border:1px solid {border_color};border-radius:12px;
-        padding:16px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+        <div class="{card_class}">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div>
-                    <span style="font-size:16px;font-weight:bold">{bank['bank_name']}</span>
-                    <span style="background:{'#4CAF50' if is_active else '#9e9e9e'};color:white;
-                    padding:2px 10px;border-radius:10px;font-size:11px;margin-left:8px">{badge_text}</span>
+                    <span class="bank-card-title">{bank['bank_name']}</span>
+                    <span class="{badge_class}">{badge_text}</span>
                 </div>
-                <div style="color:#888;font-size:12px">{import_date}</div>
+                <span class="bank-card-date">{import_date}</span>
             </div>
-            <div style="margin:8px 0;color:#666;font-size:13px">
+            <div class="bank-card-meta" style="margin:8px 0">
                 文件: {truncate_filename(bank['file_name'], 30)} &nbsp;|&nbsp; 共 <b>{bank['total_questions']}</b> 题
             </div>
             <div style="margin:6px 0">{type_tags}</div>
@@ -101,7 +97,6 @@ def render_bank_management():
                             st.session_state.current_bank_name = bank['bank_name']
                             st.session_state.current_bank_file = bank['file_name']
                             st.session_state.current_bank_id = bank['id']
-                            # 重置计数状态
                             for k in ['shared_count_regular', '_slider_key_regular', '_input_key_regular',
                                        'shared_count_review', '_slider_key_review', '_input_key_review',
                                        'question_count', 'selected_types', 'practice_mode']:

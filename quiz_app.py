@@ -44,8 +44,23 @@ init_session_state()
 # ============================================================
 st.markdown("""
 <style>
-.main-header { padding: 1rem 0; border-bottom: 2px solid #4CAF50; margin-bottom: 2rem; }
-.question-card { background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+:root {
+    --bg-page: #ffffff; --bg-card: #ffffff; --bg-card-hover: #fafafa;
+    --bg-active: #f1f8e9; --bg-header-active: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+    --text-primary: #1a1a1a; --text-secondary: #555; --text-muted: #888; --text-active: #2e7d32;
+    --border-default: #e0e0e0; --border-active: #4CAF50;
+    --shadow-card: 0 1px 4px rgba(0,0,0,0.06); --shadow-hover: 0 4px 8px rgba(0,0,0,0.1);
+}
+body.dark-mode {
+    --bg-page: #1a1a2e; --bg-card: #16213e; --bg-card-hover: #1e2d50;
+    --bg-active: #1a3a1a; --bg-header-active: linear-gradient(135deg, #1a3a1a, #0d3320);
+    --text-primary: #e0e0e0; --text-secondary: #bbb; --text-muted: #888; --text-active: #81c784;
+    --border-default: #333; --border-active: #4CAF50;
+    --shadow-card: 0 1px 4px rgba(255,255,255,0.04); --shadow-hover: 0 4px 8px rgba(0,0,0,0.3);
+}
+.stApp { background: var(--bg-page); color: var(--text-primary); }
+.main-header { padding: 1rem 0; border-bottom: 2px solid var(--border-active); margin-bottom: 2rem; }
+.question-card { background: var(--bg-card); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow-hover); margin-bottom: 1.5rem; color: var(--text-primary); }
 .correct-answer { color: #4CAF50; font-weight: bold; }
 .wrong-answer { color: #f44336; font-weight: bold; }
 .stButton > button { transition: all 0.3s ease; }
@@ -79,8 +94,17 @@ input[type="number"] { cursor: ns-resize; }
 .keyboard-key-item { display: flex; align-items: center; gap: 3px; }
 .keyboard-key-badge { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: 'Monaco', 'Menlo', monospace; color: white; min-width: 36px; text-align: center; }
 .keyboard-key-label { font-size: 11px; opacity: 0.9; }
-.question-text { font-size: 18px; font-weight: 600; line-height: 1.5; }
-
+.question-text { font-size: 18px; font-weight: 600; line-height: 1.5; color: var(--text-primary); }
+/* Bank cards */
+.bank-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 12px; padding: 16px; margin: 8px 0; box-shadow: var(--shadow-card); color: var(--text-primary); }
+.bank-card.active { background: var(--bg-active); border-color: var(--border-active); }
+.bank-card-header { background: var(--bg-header-active); border-radius: 10px; padding: 12px 16px; border-left: 4px solid var(--border-active); margin-bottom: 12px; color: var(--text-active); }
+.bank-card-title { font-size: 16px; font-weight: bold; color: var(--text-primary); }
+.bank-card-meta { color: var(--text-secondary); font-size: 13px; }
+.bank-card-date { color: var(--text-muted); font-size: 12px; }
+.bank-badge { padding: 2px 10px; border-radius: 10px; font-size: 11px; margin-left: 8px; color: white; }
+.bank-badge.active { background: #4CAF50; } .bank-badge.inactive { background: #9e9e9e; }
+.type-tag { display: inline-block; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin: 2px; }
 
 /* 题型色彩系统 */
 .qtype-single { border-left: 4px solid #2196F3 !important; }
@@ -102,23 +126,17 @@ button[kind="secondaryFormSubmit"]:has-text(":::") {
 </style>
 """, unsafe_allow_html=True)
 
-# 深色模式 CSS（手动切换）
-if st.session_state.get('dark_mode', False):
-    st.markdown("""
-    <style>
-    .stApp { background: #1a1a2e; }
-    .main-header { border-bottom-color: #555; }
-    .question-card { background: #16213e !important; color: #e0e0e0 !important; box-shadow: 0 2px 8px rgba(255,255,255,0.05) !important; }
-    .stButton > button { background: #333; color: #e0e0e0; border-color: #555; }
-    .stButton > button:hover { background: #444; }
-    div[data-testid="stMetric"] label, div[data-testid="stCaptionContainer"] { color: #aaa !important; }
-    div[data-testid="stMetricValue"] { color: #e0e0e0 !important; }
-    div[data-testid="stDataFrame"] { background: #1e1e1e; }
-    section[data-testid="stSidebar"] { background: #111; }
-    section[data-testid="stSidebar"] * { color: #ccc !important; }
-    .keyboard-hint-compact { border-color: rgba(255,255,255,0.1) !important; }
-    </style>
-    """, unsafe_allow_html=True)
+# 深色模式开关：给父页面 body 添加/移除 dark-mode class
+components.html("""
+<script>
+(function() {
+    var isDark = """ + str(st.session_state.get('dark_mode', False)).lower() + """;
+    var body = window.parent.document.body;
+    if (isDark) { body.classList.add('dark-mode'); }
+    else { body.classList.remove('dark-mode'); }
+})();
+</script>
+""", height=0)
 
 # ============================================================
 # 退出确认弹窗
